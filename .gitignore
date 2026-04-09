@@ -1,0 +1,82 @@
+## Visual Studio / MSBuild / .NET (WPF)
+
+# Visual Studio working folder
+.vs/
+
+# Build results
+**/[Bb]in/
+**/[Oo]bj/
+**/[Aa]rtifacts/
+**/[Ll]og/
+**/[Ll]ogs/
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.VC.opendb
+
+# VS/Build generated
+*.pdb
+*.mdb
+*.ilk
+*.iobj
+*.ipdb
+*.tlog
+*.lastbuildstate
+*.buildlog
+*.cache
+*.csprojAssemblyReference.cache
+
+# ClickOnce / publish output
+**/publish/
+**/app.publish/
+
+# Test results
+TestResult*/
+**/TestResults/
+*.trx
+*.testlog
+
+# NuGet
+**/packages/
+*.nupkg
+*.snupkg
+**/nuget.config.user
+project.lock.json
+project.fragment.lock.json
+artifacts/ # NuGet+SDK often uses this at repo root
+
+# ReSharper / Rider
+_ReSharper*/
+**/*.DotSettings.user
+.idea/
+
+# dotCover
+*.dotCover
+
+# Code coverage
+*.coverage
+*.coveragexml
+coverage/
+
+# Windows / OS junk
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Logs / temp
+*.log
+*.tmp
+*.bak
+*.old
+*.swp
+
+# JetBrains/VSCode misc
+.vscode/
+.cursor/
+
