@@ -1,0 +1,24 @@
+spec_version: v1
+
+meta:
+  system: validation-runner-demo-db
+
+cases:
+  - id: DEMO_DB_001
+    title: insert one row via injected provider
+    type: core
+
+    given:
+      input:
+        name: "alpha"
+
+    when:
+      action: create_demo
+
+    then:
+      output:
+        ok: true
+        row_count: 1
+
+    replay: false
+    deterministic: true

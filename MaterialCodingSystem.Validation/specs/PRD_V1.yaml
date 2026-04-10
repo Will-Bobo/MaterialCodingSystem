@@ -1,0 +1,653 @@
+spec_version: v1
+
+meta:
+  system: material-code-system
+  description: material coding system validation spec (V1 freeze aligned to PRD V1.2)
+  invariant: true
+
+
+cases:
+
+# =====================================================
+# 1. 主物料创建成功
+# =====================================================
+  - id: CREATE_A_SUCCESS_001
+    title: 创建主物料成功（首个）
+    type: core
+
+    given:
+      db:
+        category:
+          - code: ZDA
+            name: 电阻
+
+      input:
+        category_code: ZDA
+        spec: CL10A106KP8NNNC
+        description: 10uF 16V 0603 X5R
+        name: test
+        brand: YAGEO
+
+    when:
+      action: create_material_A
+
+    then:
+      output:
+        code: ZDA0000001A
+
+      db:
+        material_group:
+          exists:
+            category_code: ZDA
+            serial_no: 1
+
+        material_item:
+          exists:
+            code: ZDA0000001A
+            spec: CL10A106KP8NNNC
+            spec_normalized: 10UF 16V 0603
+            status: 1
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 2. spec唯一性（核心规则）
+# =====================================================
+  - id: SPEC_DUPLICATE_001
+    title: 同分类 spec 重复必须阻止
+    type: core
+
+    given:
+      db:
+        category:
+          - code: ZDA
+
+        material_item:
+          - category_code: ZDA
+            spec: CL10A106KP8NNNC
+            status: 1
+
+      input:
+        category_code: ZDA
+        spec: CL10A106KP8NNNC
+        description: 10uF 16V 0603
+
+    when:
+      action: create_material_A
+
+    then:
+      error:
+        code: SPEC_DUPLICATE
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 3. spec_normalized规则（严格收敛）
+# =====================================================
+  - id: SPEC_NORMALIZE_001
+    title: description → spec_normalized 规则
+    type: invariant
+
+    given:
+      input:
+        description: " 10uF   16V   0603  "
+
+    when:
+      action: normalize_spec
+
+    then:
+      output:
+        spec_normalized: "10UF 16V 0603"
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 4. spec_normalized不参与唯一性
+# =====================================================
+  - id: SPEC_NORMALIZED_IGNORE_DUP_001
+    title: spec_normalized相同不阻止创建
+    type: core
+
+    given:
+      db:
+        material_item:
+          - category_code: ZDA
+            spec: AAAAA11111
+            description: 10uF 16V 0603
+            spec_normalized: 10UF 16V 0603
+
+      input:
+        category_code: ZDA
+        spec: BBBBB22222
+        description: 10uF 16V 0603
+
+    when:
+      action: create_material_A
+
+    then:
+      output:
+        code: ZDA0000002A
+
+      db:
+        material_item:
+          exists:
+            spec: BBBBB22222
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 5. 替代料生成（A-Z）
+# =====================================================
+  - id: CREATE_REPLACEMENT_001
+    title: 替代料顺序生成
+    type: core
+
+    given:
+      db:
+        material_group:
+          - id: 1
+            category_code: ZDA
+            serial_no: 1
+
+        material_item:
+          - group_id: 1
+            suffix: A
+          - group_id: 1
+            suffix: B
+
+      input:
+        group_id: 1
+        spec: CL10A106KP8NNND
+        description: 10uF 16V 0603 X5R
+
+    when:
+      action: create_material_replacement
+
+    then:
+      output:
+        code: ZDA0000001C
+
+      db:
+        material_item:
+          exists:
+            suffix: C
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 6. suffix连续性约束（核心规则）
+# =====================================================
+  - id: SUFFIX_GAP_FORBIDDEN_001
+    title: suffix不连续禁止创建
+    type: core
+
+    given:
+      db:
+        material_item:
+          - group_id: 1
+            suffix: A
+          - group_id: 1
+            suffix: C
+
+      input:
+        group_id: 1
+        spec: xxx
+
+    when:
+      action: create_material_replacement
+
+    then:
+      error:
+        code: SUFFIX_GAP_FORBIDDEN
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 7. suffix上限Z
+# =====================================================
+  - id: SUFFIX_OVERFLOW_001
+    title: 超过Z禁止创建
+    type: edge
+
+    given:
+      db:
+        material_item:
+          - group_id: 1
+            suffix: Z
+
+      input:
+        group_id: 1
+        spec: xxx
+
+    when:
+      action: create_material_replacement
+
+    then:
+      error:
+        code: SUFFIX_OVERFLOW
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 8. 废弃仍占唯一性（PRD关键约束）
+# =====================================================
+  - id: STATUS_NO_DELETE_001
+    title: 废弃数据仍占spec唯一性
+    type: invariant
+
+    given:
+      db:
+        material_item:
+          - category_code: ZDA
+            spec: CL10A106KP8NNNC
+            status: 0
+
+      input:
+        category_code: ZDA
+        spec: CL10A106KP8NNNC
+        description: 10uF
+
+    when:
+      action: create_material_A
+
+    then:
+      error:
+        code: SPEC_DUPLICATE
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 9. 并发创建（结果唯一）
+# =====================================================
+  - id: CONCURRENT_CREATE_A_001
+    title: 并发创建主物料不重复
+    type: edge
+
+    given:
+      input:
+        category_code: ZDA
+        spec_prefix: TEST_
+        count: 5
+
+    when:
+      action: create_material_A_batch
+
+    then:
+      output:
+        no_duplicate: true
+
+      db:
+        material_item:
+          unique: code
+
+    replay: true
+    deterministic: false
+
+  
+cases:
+
+# =====================================================
+# 10. category validation（分类合法性）
+# =====================================================
+  - id: CATEGORY_VALIDATE_001
+    title: 不存在的分类必须拒绝
+    type: core
+
+    given:
+      db:
+        category:
+          - code: ZDA
+
+      input:
+        category_code: INVALID
+        spec: ABC123
+        description: test
+
+    when:
+      action: create_material_A
+
+    then:
+      error:
+        code: CATEGORY_NOT_FOUND
+
+    replay: true
+    deterministic: true
+
+
+  - id: CATEGORY_VALIDATE_002
+    title: 分类为空必须拒绝
+    type: core
+
+    given:
+      input:
+        category_code: ""
+        spec: ABC123
+        description: test
+
+    when:
+      action: create_material_A
+
+    then:
+      error:
+        code: CATEGORY_REQUIRED
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 11. lifecycle（group / status 生命周期）
+# =====================================================
+  - id: LIFECYCLE_GROUP_FREEZE_001
+    title: group 创建后不可变更 category_code
+    type: invariant
+
+    given:
+      db:
+        material_group:
+          - id: 1
+            category_code: ZDA
+            serial_no: 1
+
+      input:
+        group_id: 1
+        category_code: ZDB   # 尝试篡改
+        spec: XXX
+
+    when:
+      action: update_group
+
+    then:
+      error:
+        code: GROUP_CATEGORY_LOCKED
+
+    replay: true
+    deterministic: true
+
+
+  - id: LIFECYCLE_STATUS_TRANSITION_001
+    title: status非法流转禁止
+    type: invariant
+
+    given:
+      db:
+        material_item:
+          - code: ZDA0000001A
+            status: 1   # active
+
+      input:
+        code: ZDA0000001A
+        status: 2      # 非法状态
+
+    when:
+      action: update_status
+
+    then:
+      error:
+        code: INVALID_STATUS_TRANSITION
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 12. normalization edge cases（规范化边界）
+# =====================================================
+  - id: NORMALIZE_EDGE_001
+    title: description包含特殊字符（仅基础规范化）
+    type: edge
+
+    given:
+      input:
+        description: " 10uF@16V   (0603)   X5R "
+
+    when:
+      action: normalize_spec
+
+    then:
+      output:
+        spec_normalized: "10UF@16V (0603) X5R"
+
+    replay: true
+    deterministic: true
+
+    replay: true
+    deterministic: true
+
+
+  - id: NORMALIZE_EDGE_002
+    title: 中英混合文本（不做语义提取）
+    type: edge
+
+    given:
+      input:
+        description: "电容 capacitor 10uF 16V"
+
+    when:
+      action: normalize_spec
+
+    then:
+      output:
+        spec_normalized: "电容 CAPACITOR 10UF 16V"
+
+    replay: true
+    deterministic: true
+
+
+  - id: NORMALIZE_EDGE_003
+    title: 空描述处理
+    type: edge
+
+    given:
+      input:
+        description: ""
+
+    when:
+      action: normalize_spec
+
+    then:
+      output:
+        spec_normalized: ""
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 13. concurrency semantics（并发语义强化）
+# =====================================================
+  - id: CONCURRENT_SPEC_UNIQUE_001
+    title: 并发创建同spec必须唯一
+    type: invariant
+
+    given:
+      input:
+        category_code: ZDA
+        spec: SAME_SPEC
+        concurrent: 10
+
+    when:
+      action: create_material_A_concurrent
+
+    then:
+      output:
+        success_count: 1
+        duplicate_rejected: 9
+
+      db:
+        material_item:
+          unique_constraint: "category_code+spec"
+
+    replay: true
+    deterministic: false
+
+
+# =====================================================
+# 14. suffix policy ambiguity（补齐歧义规则）
+# =====================================================
+  - id: SUFFIX_POLICY_AMBIGUITY_001
+    title: 删除中间 suffix 是否允许复用（必须明确）
+    type: invariant
+
+    given:
+      db:
+        material_item:
+          - group_id: 1
+            suffix: A
+          - group_id: 1
+            suffix: B
+          - group_id: 1
+            suffix: C
+
+      input:
+        group_id: 1
+        deleted_suffix: B
+
+    when:
+      action: create_material_replacement
+
+    then:
+      error:
+        code: SUFFIX_NO_REUSE   # PRD冻结：不可复用历史 suffix
+
+    replay: true
+    deterministic: true
+
+
+  - id: SUFFIX_POLICY_AMBIGUITY_002
+    title: suffix生成必须严格递增，不允许补洞
+    type: invariant
+
+    given:
+      db:
+        material_item:
+          - group_id: 1
+            suffix: A
+          - group_id: 1
+            suffix: C
+
+      input:
+        group_id: 1
+
+    when:
+      action: create_material_replacement
+
+    then:
+      error:
+        code: SUFFIX_NO_GAP_FILL
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 15. code generation rules（编码生成规则补全）
+# =====================================================
+  - id: CODE_GEN_GROUP_SEQ_001
+    title: group内序号必须连续递增
+    type: invariant
+
+    given:
+      db:
+        material_group:
+          - category_code: ZDA
+            serial_no: 1
+
+      input:
+        category_code: ZDA
+
+    when:
+      action: allocate_group_serial
+
+    then:
+      output:
+        serial_no: 2
+
+    replay: true
+    deterministic: true
+
+
+  - id: CODE_GEN_MATERIAL_FORMAT_001
+    title: material code 格式必须符合规范
+    type: invariant
+
+    given:
+      input:
+        category_code: ZDA
+        serial_no: 12
+        suffix: A
+
+    when:
+      action: generate_material_code
+
+    then:
+      output:
+        code: "ZDA0000012A"
+
+    replay: true
+    deterministic: true
+
+
+  - id: CODE_GEN_PADDING_RULE_001
+    title: serial_no 必须左补零6位
+    type: invariant
+
+    given:
+      input:
+        serial_no: 1
+
+    when:
+      action: format_serial
+
+    then:
+      output:
+        formatted: "000001"
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 16. group 自动创建（核心生命周期补全）
+# =====================================================
+  - id: GROUP_AUTO_CREATE_001
+    title: 创建物料自动生成group
+    type: core
+
+    given:
+      db:
+        material_group: []
+
+      input:
+        category_code: ZDA
+        spec: CL10A106KP8NNNC
+        description: 10uF
+
+    when:
+      action: create_material_A
+
+    then:
+      db:
+        material_group:
+          exists:
+            category_code: ZDA
+            serial_no: 1
+
+    replay: true
+    deterministic: true

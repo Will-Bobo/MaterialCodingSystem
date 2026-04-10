@@ -1,0 +1,43 @@
+spec_version: v1
+
+meta:
+  system: material-code-system
+  description: string            # 该 spec 的描述
+  invariant: true                # 是否为系统不变量
+  author: string                 # 可选：责任人
+  tags: []                       # 分类标签
+
+cases:
+  - id: string                   # 唯一标识
+    title: string                # 用例描述
+    type: core | edge | error | invariant
+
+    given:
+      db: []                     # 初始数据库状态（快照）
+      input: {}                  # 输入参数（结构化）
+
+    when:
+      action: string             # 语义动作（必须是抽象的）
+      context: {}                # 可选上下文（如权限、环境）
+
+    then:
+      output: {}                 # 返回值断言（结构化）
+      db: []                     # 数据库期望状态（最终态）
+
+      error:
+        should_throw: boolean     # 是否期望异常
+        code: string              # 错误码（推荐）
+        message: string           # 错误信息（可选）
+
+      assertions: []             # 扩展断言（表达复杂规则）
+        # 示例：
+        # - field: result.count
+        #   op: eq
+        #   value: 10
+
+    invariants:
+      - name: string              # 不变量名称
+        condition: string         # 条件表达式（可由 Runner 解析）
+
+    replay: true                  # 是否支持幂等执行
+    deterministic: true           # 是否要求完全确定性
