@@ -80,3 +80,5 @@ $RECYCLE.BIN/
 .vscode/
 .cursor/
 
+dist/
+
