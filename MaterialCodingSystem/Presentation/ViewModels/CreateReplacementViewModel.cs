@@ -13,8 +13,16 @@ public sealed class CreateReplacementViewModel : ViewModelBase
     private string _existingItemCode = "";
     public string ExistingItemCode { get => _existingItemCode; set => SetProperty(ref _existingItemCode, value); }
 
-    private int _groupId = 1;
-    public int GroupId { get => _groupId; set => SetProperty(ref _groupId, value); }
+    private int _groupId;
+    public int GroupId
+    {
+        get => _groupId;
+        set
+        {
+            if (SetProperty(ref _groupId, value))
+                CreateCommand.RaiseCanExecuteChanged();
+        }
+    }
 
     private string _groupInfo = "";
     public string GroupInfo { get => _groupInfo; set => SetProperty(ref _groupInfo, value); }
@@ -57,6 +65,9 @@ public sealed class CreateReplacementViewModel : ViewModelBase
     private string _specFieldError = "";
     public string SpecFieldError { get => _specFieldError; set => SetProperty(ref _specFieldError, value); }
 
+    private string _replacementCreateHint = "";
+    public string ReplacementCreateHint { get => _replacementCreateHint; set => SetProperty(ref _replacementCreateHint, value); }
+
     public RelayCommand CreateCommand { get; }
     public RelayCommand ResolveGroupCommand { get; }
     public RelayCommand LoadGroupInfoCommand { get; }
@@ -67,7 +78,7 @@ public sealed class CreateReplacementViewModel : ViewModelBase
     {
         _app = app;
         _dialogService = dialogService;
-        CreateCommand = new RelayCommand(async () => await CreateAsync());
+        CreateCommand = new RelayCommand(async () => await CreateAsync(), () => GroupId > 0);
         ResolveGroupCommand = new RelayCommand(async () => await ResolveGroupAndReportAsync());
         LoadGroupInfoCommand = new RelayCommand(async () => await LoadGroupInfoCoreAsync());
         EmbeddedCodeSearchCommand = new RelayCommand(async () => await EmbeddedSearchByCodeAsync());
@@ -105,6 +116,7 @@ public sealed class CreateReplacementViewModel : ViewModelBase
         GroupCodeDisplay = "";
         ExistingSuffixDisplay = "";
         NextSuffixDisplay = "";
+        ReplacementCreateHint = "";
         var res = await _app.GetGroupInfo(GroupId);
         if (!res.IsSuccess)
         {
@@ -120,6 +132,7 @@ public sealed class CreateReplacementViewModel : ViewModelBase
             ? "已有替代料: （无）"
             : $"已有替代料: {string.Join(" / ", suffixParts)}";
         NextSuffixDisplay = $"将创建: {d.NextSuffix}";
+        ReplacementCreateHint = $"该物料将作为该组的替代料（suffix = {d.NextSuffix}）";
     }
 
     private async Task EmbeddedSearchByCodeAsync()

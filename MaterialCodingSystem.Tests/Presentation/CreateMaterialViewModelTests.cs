@@ -22,6 +22,8 @@ public sealed class CreateMaterialViewModelTests
         public void ShowWarning(string title, string message)
         {
         }
+
+        public bool ConfirmCreateDespitePossibleDuplicate() => true;
     }
 
     [Fact]
@@ -34,7 +36,6 @@ public sealed class CreateMaterialViewModelTests
             app,
             new SynchronousDebouncer(),
             new NoopDialogService(),
-            _ => Task.CompletedTask,
             _ => Task.CompletedTask,
             () => Task.CompletedTask);
 
@@ -60,7 +61,6 @@ public sealed class CreateMaterialViewModelTests
             new SynchronousDebouncer(),
             new NoopDialogService(),
             _ => Task.CompletedTask,
-            _ => Task.CompletedTask,
             () => Task.CompletedTask);
 
         await Task.Delay(150);
@@ -83,7 +83,6 @@ public sealed class CreateMaterialViewModelTests
             app,
             new SynchronousDebouncer(),
             new NoopDialogService(),
-            _ => Task.CompletedTask,
             _ => Task.CompletedTask,
             () => Task.CompletedTask);
 

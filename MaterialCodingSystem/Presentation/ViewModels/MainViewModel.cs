@@ -33,7 +33,6 @@ public sealed class MainViewModel : ViewModelBase
             app,
             debouncer,
             dialogService,
-            NavigateToReplacementFromExistingCodeAsync,
             NavigateToReplacementFromCandidateAsync,
             OpenAddCategoryDialog);
 

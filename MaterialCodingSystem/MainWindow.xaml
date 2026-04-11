@@ -62,14 +62,14 @@
                         <TextBlock Grid.Row="5" Grid.Column="1" Margin="8,4" Foreground="Red" TextWrapping="Wrap" Text="{Binding CreateMaterial.GlobalError}"/>
 
                         <Border Grid.Row="6" Grid.Column="1" Margin="8,4" Padding="8" Background="#FFFEF9E6" BorderBrush="#FFF5DEB3" BorderThickness="1"
-                                Visibility="{Binding CreateMaterial.DecisionBarVisible, Converter={StaticResource BoolToVis}}">
+                                Visibility="{Binding CreateMaterial.ShowDecisionBar, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
-                                <TextBlock TextWrapping="Wrap" Text="检测到可能相关的物料（V1：子串包含），是否作为替代料？"/>
+                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" Text="请选择："/>
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                    <Button Content="选中行作为替代料加入" Padding="10,4" Margin="0,0,8,0"
-                                            Command="{Binding CreateMaterial.AddCandidateAsReplacementCommand}"
+                                    <Button Content="作为替代料" Padding="10,4" Margin="0,0,8,0"
+                                            Command="{Binding CreateMaterial.UseCandidateAsReplacementCommand}"
                                             CommandParameter="{Binding CreateMaterial.SelectedCandidate}"/>
-                                    <Button Content="强制新建物料" Padding="10,4" Command="{Binding CreateMaterial.ForceNewMaterialCommand}"/>
+                                    <Button Content="仍然新建主物料" Padding="10,4" Command="{Binding CreateMaterial.ForceCreateWithConfirmCommand}"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -77,7 +77,7 @@
                         <TextBlock Grid.Row="7" Grid.Column="1" Margin="8,4" FontWeight="SemiBold" Text="候选物料（实时 Top20）"/>
                         <Grid Grid.Row="8" Grid.Column="1" Margin="8,4">
                             <DataGrid ItemsSource="{Binding CreateMaterial.CandidateItems}" Height="180"
-                                      SelectedItem="{Binding CreateMaterial.SelectedCandidate}"
+                                      SelectedItem="{Binding CreateMaterial.SelectedCandidate, Mode=TwoWay}"
                                       AutoGenerateColumns="False" IsReadOnly="True">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="编码" Binding="{Binding Code}" Width="160"/>
@@ -97,12 +97,10 @@
                                     </DataGridTemplateColumn>
                                 </DataGrid.Columns>
                             </DataGrid>
-                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"
-                                       Visibility="{Binding CreateMaterial.CandidateLoading, Converter={StaticResource BoolToVis}}"
-                                       Text="加载中…" Background="#AAFFFFFF" Padding="12"/>
                         </Grid>
 
-                        <TextBlock Grid.Row="9" Grid.Column="1" Margin="8,4" Foreground="DimGray" TextWrapping="Wrap" Text="{Binding CreateMaterial.CandidateStatus}"/>
+                        <TextBlock Grid.Row="9" Grid.Column="1" Margin="8,4" Foreground="DimGray" TextWrapping="Wrap"
+                                   Text="{Binding CreateMaterial.CandidateStatus}"/>
 
                         <StackPanel Grid.Row="10" Grid.ColumnSpan="2" Orientation="Vertical" Margin="0,12,0,0">
                             <Button Width="140" HorizontalAlignment="Left" Content="创建主物料" Command="{Binding CreateMaterial.CreateCommand}"/>
@@ -182,6 +180,7 @@
                                    Text="{Binding CreateReplacement.GroupInfo}"/>
 
                         <StackPanel Grid.Row="5" Grid.Column="1" Margin="8,4">
+                            <TextBlock FontWeight="Bold" Text="当前替代组"/>
                             <TextBlock FontWeight="Bold"
                                        Text="{Binding CreateReplacement.GroupCodeDisplay}"/>
                             <TextBlock Foreground="DimGray"
@@ -207,6 +206,8 @@
                         <TextBox Grid.Row="9" Grid.Column="1" Margin="8,4" Text="{Binding CreateReplacement.Brand, UpdateSourceTrigger=PropertyChanged}"/>
 
                         <StackPanel Grid.Row="10" Grid.ColumnSpan="2" Orientation="Vertical" Margin="0,12,0,0">
+                            <TextBlock TextWrapping="Wrap" Foreground="DarkSlateGray" Margin="0,0,0,8"
+                                       Text="{Binding CreateReplacement.ReplacementCreateHint}"/>
                             <Button Width="140" HorizontalAlignment="Left" Content="创建替代料" Command="{Binding CreateReplacement.CreateCommand}"/>
                             <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Text="{Binding CreateReplacement.Result}"/>
                         </StackPanel>

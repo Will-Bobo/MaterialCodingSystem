@@ -13,7 +13,6 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     private readonly MaterialApplicationService _app;
     private readonly IDebouncer _debouncer;
     private readonly IDialogService _dialogService;
-    private readonly Func<string, Task> _navigateToReplacementByCode;
     private readonly Func<MaterialItemSpecHit, Task> _navigateToReplacementFromCandidate;
     private readonly Func<Task> _openAddCategoryDialog;
 
@@ -35,7 +34,27 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     public MaterialSearchKeywordSource KeywordSource
     {
         get => _keywordSource;
-        set => SetProperty(ref _keywordSource, value);
+        set
+        {
+            if (SetProperty(ref _keywordSource, value))
+                ScheduleCandidateRefresh();
+        }
+    }
+
+    private CreateDecisionState _decisionState = CreateDecisionState.Idle;
+    public CreateDecisionState DecisionState => _decisionState;
+
+    public bool ShowDecisionBar => DecisionState == CreateDecisionState.HasCandidate;
+
+    private MaterialItemSpecHit? _selectedCandidate;
+    public MaterialItemSpecHit? SelectedCandidate
+    {
+        get => _selectedCandidate;
+        set
+        {
+            if (SetProperty(ref _selectedCandidate, value))
+                UseCandidateAsReplacementCommand.RaiseCanExecuteChanged();
+        }
     }
 
     private string _spec = "";
@@ -45,10 +64,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         set
         {
             if (SetProperty(ref _spec, value))
-            {
-                if (KeywordSource == MaterialSearchKeywordSource.Spec)
-                    ScheduleCandidateRefresh();
-            }
+                ScheduleCandidateRefresh();
         }
     }
 
@@ -59,10 +75,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         set
         {
             if (SetProperty(ref _description, value))
-            {
-                if (KeywordSource == MaterialSearchKeywordSource.Description)
-                    ScheduleCandidateRefresh();
-            }
+                ScheduleCandidateRefresh();
         }
     }
 
@@ -82,60 +95,52 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     public string GlobalError { get => _globalError; set => SetProperty(ref _globalError, value); }
 
     private bool _candidateLoading;
-    public bool CandidateLoading { get => _candidateLoading; set => SetProperty(ref _candidateLoading, value); }
+    public bool CandidateLoading
+    {
+        get => _candidateLoading;
+        set => SetProperty(ref _candidateLoading, value);
+    }
 
     private string _candidateStatus = "";
     public string CandidateStatus { get => _candidateStatus; set => SetProperty(ref _candidateStatus, value); }
 
-    private bool _decisionBarVisible;
-    public bool DecisionBarVisible { get => _decisionBarVisible; set => SetProperty(ref _decisionBarVisible, value); }
-
-    private MaterialItemSpecHit? _selectedCandidate;
-    public MaterialItemSpecHit? SelectedCandidate
-    {
-        get => _selectedCandidate;
-        set => SetProperty(ref _selectedCandidate, value);
-    }
-
     public RelayCommand CreateCommand { get; }
     public RelayCommand RefreshCategoriesCommand { get; }
     public RelayCommand OpenAddCategoryCommand { get; }
-    public RelayCommand<MaterialItemSpecHit> AddCandidateAsReplacementCommand { get; }
     public RelayCommand<MaterialItemSpecHit> UseCandidateAsReplacementCommand { get; }
-    public RelayCommand ForceNewMaterialCommand { get; }
+    public RelayCommand ForceCreateWithConfirmCommand { get; }
 
     public CreateMaterialViewModel(
         MaterialApplicationService app,
         IDebouncer debouncer,
         IDialogService dialogService,
-        Func<string, Task> navigateToReplacementByCode,
         Func<MaterialItemSpecHit, Task> navigateToReplacementFromCandidate,
         Func<Task> openAddCategoryDialog)
     {
         _app = app;
         _debouncer = debouncer;
         _dialogService = dialogService;
-        _navigateToReplacementByCode = navigateToReplacementByCode;
         _navigateToReplacementFromCandidate = navigateToReplacementFromCandidate;
         _openAddCategoryDialog = openAddCategoryDialog;
 
-        CreateCommand = new RelayCommand(async () => await CreateAsync());
+        CreateCommand = new RelayCommand(async () => await CreateAsync(), CanExecuteCreate);
         RefreshCategoriesCommand = new RelayCommand(async () => await RefreshCategoriesAsync());
         OpenAddCategoryCommand = new RelayCommand(async () => await OpenAddCategoryAsync());
-        AddCandidateAsReplacementCommand = new RelayCommand<MaterialItemSpecHit>(async hit =>
-        {
-            if (hit is not null)
-                await _navigateToReplacementByCode(hit.Code);
-        });
-        UseCandidateAsReplacementCommand = new RelayCommand<MaterialItemSpecHit>(async hit =>
-        {
-            if (hit is not null)
-                await _navigateToReplacementFromCandidate(hit);
-        });
-        ForceNewMaterialCommand = new RelayCommand(() =>
-        {
-            DecisionBarVisible = false;
-        });
+        UseCandidateAsReplacementCommand = new RelayCommand<MaterialItemSpecHit>(
+            async hit =>
+            {
+                if (hit is not null)
+                    await _navigateToReplacementFromCandidate(hit);
+            },
+            hit => hit is not null);
+        ForceCreateWithConfirmCommand = new RelayCommand(
+            () =>
+            {
+                if (!_dialogService.ConfirmCreateDespitePossibleDuplicate())
+                    return;
+                SetDecisionState(CreateDecisionState.ForcedCreate);
+            },
+            () => DecisionState == CreateDecisionState.HasCandidate);
 
         _ = RefreshCategoriesAsync();
     }
@@ -144,19 +149,96 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
     public void NotifyDescriptionFieldFocused() => KeywordSource = MaterialSearchKeywordSource.Description;
 
+    private static bool AreSpecAndDescriptionBothEmpty(string spec, string description) =>
+        string.IsNullOrWhiteSpace(spec) && string.IsNullOrWhiteSpace(description);
+
+    private bool CanExecuteCreate()
+    {
+        if (DecisionState == CreateDecisionState.Searching || DecisionState == CreateDecisionState.HasCandidate)
+            return false;
+        if (DecisionState == CreateDecisionState.NoCandidate || DecisionState == CreateDecisionState.ForcedCreate)
+            return true;
+        return DecisionState == CreateDecisionState.Idle && KeywordSource == MaterialSearchKeywordSource.None;
+    }
+
+    private bool SetDecisionState(CreateDecisionState value)
+    {
+        if (!SetProperty(ref _decisionState, value, nameof(DecisionState)))
+            return false;
+        NotifyPropertyChanged(nameof(ShowDecisionBar));
+        CreateCommand.RaiseCanExecuteChanged();
+        ForceCreateWithConfirmCommand.RaiseCanExecuteChanged();
+        return true;
+    }
+
     private void ScheduleCandidateRefresh()
     {
+        if (DecisionState == CreateDecisionState.ForcedCreate)
+            SetDecisionState(CreateDecisionState.Searching);
+
+        PrimeSearchingStateIfApplicable();
         _debouncer.Debounce(CandidateDebounceKey, TimeSpan.FromMilliseconds(300), RefreshCandidatesCoreAsync);
+    }
+
+    private void TrySetIdleIfBothInputsEmpty()
+    {
+        if (AreSpecAndDescriptionBothEmpty(Spec, Description))
+            SetDecisionState(CreateDecisionState.Idle);
+    }
+
+    private void PrimeSearchingStateIfApplicable()
+    {
+        if (KeywordSource == MaterialSearchKeywordSource.None)
+        {
+            CandidateItems.Clear();
+            SelectedCandidate = null;
+            CandidateLoading = false;
+            CandidateStatus = "";
+            TrySetIdleIfBothInputsEmpty();
+            CreateCommand.RaiseCanExecuteChanged();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(SelectedCategory?.Code))
+        {
+            CandidateItems.Clear();
+            SelectedCandidate = null;
+            CandidateLoading = false;
+            CandidateStatus = "请选择分类并输入关键字。";
+            TrySetIdleIfBothInputsEmpty();
+            CreateCommand.RaiseCanExecuteChanged();
+            return;
+        }
+
+        var keyword = KeywordSource == MaterialSearchKeywordSource.Spec ? Spec : Description;
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            CandidateItems.Clear();
+            SelectedCandidate = null;
+            CandidateLoading = false;
+            CandidateStatus = "";
+            TrySetIdleIfBothInputsEmpty();
+            CreateCommand.RaiseCanExecuteChanged();
+            return;
+        }
+
+        CandidateStatus = "搜索中...";
+        SetDecisionState(CreateDecisionState.Searching);
+        CandidateLoading = true;
+        CreateCommand.RaiseCanExecuteChanged();
     }
 
     private async Task RefreshCandidatesCoreAsync(CancellationToken ct)
     {
         CandidateItems.Clear();
-        DecisionBarVisible = false;
+        SelectedCandidate = null;
         CandidateStatus = "";
+
         if (KeywordSource == MaterialSearchKeywordSource.None)
         {
-            CandidateStatus = "请先点击规格号或规格描述输入框，再输入以查看候选（Top20）。";
+            CandidateLoading = false;
+            TrySetIdleIfBothInputsEmpty();
+            CreateCommand.RaiseCanExecuteChanged();
             return;
         }
 
@@ -164,11 +246,20 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         var categoryCode = SelectedCategory?.Code?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(categoryCode) || string.IsNullOrWhiteSpace(keyword))
         {
-            CandidateStatus = "请选择分类并输入关键字。";
+            CandidateLoading = false;
+            CandidateStatus = string.IsNullOrWhiteSpace(categoryCode)
+                ? "请选择分类并输入关键字。"
+                : "";
+            TrySetIdleIfBothInputsEmpty();
+            CreateCommand.RaiseCanExecuteChanged();
             return;
         }
 
+        CandidateStatus = "搜索中...";
         CandidateLoading = true;
+        SetDecisionState(CreateDecisionState.Searching);
+        CreateCommand.RaiseCanExecuteChanged();
+
         try
         {
             var res = await _app.SearchBySpec(new SearchQuery(
@@ -182,22 +273,31 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             if (!res.IsSuccess)
             {
                 CandidateStatus = $"候选加载失败：{res.Error!.Code}";
+                TrySetIdleIfBothInputsEmpty();
+                CreateCommand.RaiseCanExecuteChanged();
                 return;
             }
 
             foreach (var x in res.Data!.Items)
                 CandidateItems.Add(x);
 
-            CandidateStatus = res.Data.Items.Count == 0
-                ? "未发现匹配项。"
-                : $"找到 {res.Data.Items.Count} 条候选（子串包含，仅供参考）。";
-
             if (res.Data.Items.Count > 0)
-                DecisionBarVisible = true;
+            {
+                CandidateStatus = $"检测到可能重复物料（Top20）：共 {res.Data.Items.Count} 条，请抉择";
+                SetDecisionState(CreateDecisionState.HasCandidate);
+                SelectedCandidate = CandidateItems[0];
+            }
+            else
+            {
+                CandidateStatus = "未发现匹配物料，可直接创建新主料";
+                SetDecisionState(CreateDecisionState.NoCandidate);
+            }
         }
         finally
         {
             CandidateLoading = false;
+            CreateCommand.RaiseCanExecuteChanged();
+            UseCandidateAsReplacementCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -247,6 +347,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         if (res.IsSuccess)
         {
             Result = $"创建成功：{res.Data!.Code}（spec_normalized={res.Data.SpecNormalized}）";
+            ScheduleCandidateRefresh();
             return;
         }
 
