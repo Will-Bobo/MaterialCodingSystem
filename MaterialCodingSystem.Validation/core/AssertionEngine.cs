@@ -1,18 +1,30 @@
+using MaterialCodingSystem.Validation.runner;
+
 namespace MaterialCodingSystem.Validation.core;
 
 public class AssertionEngine
 {
     public void Assert(ExecutionPlan plan, object result)
     {
+        var outcome = result as MaterialCodingSystem.Validation.runner.ExecutionOutcome;
+        var actualResult = outcome?.Result ?? result;
+        var db = outcome?.Db;
+
         foreach (var a in plan.Assertions)
         {
             switch (a)
             {
                 case AssertionSpec.ExpectError ee:
-                    AssertError(ee, result);
+                    AssertError(ee, actualResult);
                     break;
                 case AssertionSpec.ExpectResultEquals eq:
-                    AssertResultEquals(eq, result);
+                    AssertResultEquals(eq, actualResult);
+                    break;
+                case AssertionSpec.ExpectDbExists ex:
+                    if (db is not SqliteDbFixture sqlite)
+                        throw new Exception("DB assertion requires SqliteDbFixture");
+                    if (!sqlite.Exists(ex.Table, ex.Where))
+                        throw new Exception($"DB exists assertion failed: {ex.Table}");
                     break;
                 default:
                     throw new Exception($"Unknown assertion: {a.GetType().Name}");

@@ -1,8 +1,6 @@
 ﻿using MaterialCodingSystem.Validation.actions;
 using MaterialCodingSystem.Validation.core;
-using MaterialCodingSystem.Validation.infrastructure;
 using MaterialCodingSystem.Validation.runner;
-using MaterialCodingSystem.Validation.services;
 
 class Program
 {
@@ -17,14 +15,20 @@ class Program
         var parser = new YamlExecutionPlanParser();
         var cases = parser.ParseFile(args[0]);
 
-        // 方案 A：测试环境通过注入 TestDbContextProvider，与主业务解耦（主工程不引用 Runner）。
-        var dbProvider = new TestDbContextProvider();
-        var demoService = new DemoMaterialService(dbProvider);
-
         var dispatcher = new ActionDispatcher(new Dictionary<string, Func<Context, object>>
         {
+            // pure
             ["echo"] = BuiltInActions.Echo,
-            ["create_demo"] = demoService.Create
+            ["normalize_spec"] = PrdActions.NormalizeSpec,
+            ["create_material_A"] = PrdActions.CreateMaterialA,
+            ["create_material_replacement"] = PrdActions.CreateMaterialReplacement,
+            ["generate_material_code"] = PrdActions.GenerateMaterialCode,
+            ["format_serial"] = PrdActions.FormatSerial,
+            ["update_status"] = PrdActions.UpdateStatus,
+            ["update_group"] = PrdActions.UpdateGroup,
+            ["allocate_group_serial"] = PrdActions.AllocateGroupSerial,
+            ["create_material_A_batch"] = PrdActions.CreateMaterialABatch,
+            ["create_material_A_concurrent"] = PrdActions.CreateMaterialAConcurrent,
         });
 
         var runner = new ValidationRunner(dispatcher, new AssertionEngine());
@@ -34,8 +38,7 @@ class Program
             var r = runner.Run(plan);
             Console.WriteLine($"Case: {caseId}");
             Console.WriteLine($"Result: {(r.Passed ? "PASS" : "FAIL")}");
-            if (!r.Passed)
-                Console.WriteLine($"Reason: {r.Reason}");
+            if (!r.Passed) Console.WriteLine($"Reason: {r.Reason}");
             Console.WriteLine();
         }
     }

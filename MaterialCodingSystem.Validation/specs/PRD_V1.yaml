@@ -45,7 +45,7 @@ cases:
           exists:
             code: ZDA0000001A
             spec: CL10A106KP8NNNC
-            spec_normalized: 10UF 16V 0603
+            spec_normalized: 10UF 16V 0603 X5R
             status: 1
 
     replay: true

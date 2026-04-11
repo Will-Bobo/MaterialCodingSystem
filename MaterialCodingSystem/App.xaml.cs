@@ -1,14 +1,66 @@
-﻿using System.Configuration;
-using System.Data;
+﻿using MaterialCodingSystem.Application;
+using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Infrastructure.Excel;
+using MaterialCodingSystem.Infrastructure.Preferences;
+using MaterialCodingSystem.Infrastructure.Sqlite;
+using MaterialCodingSystem.Presentation.Scheduling;
+using MaterialCodingSystem.Presentation.Services;
+using MaterialCodingSystem.Presentation.ViewModels;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
+using System.IO;
 using System.Windows;
+using System.Windows.Threading;
 
-namespace MaterialCodingSystem
+namespace MaterialCodingSystem;
+
+public partial class App : System.Windows.Application
 {
-	/// <summary>
-	/// Interaction logic for App.xaml
-	/// </summary>
-	public partial class App : Application
-	{
-	}
+    public static ServiceProvider Services { get; private set; } = null!;
 
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+
+        var sc = new ServiceCollection();
+
+        var dataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MaterialCodingSystem");
+        Directory.CreateDirectory(dataDir);
+        var dbPath = Path.Combine(dataDir, "mcs.db");
+        var prefsPath = Path.Combine(dataDir, "preferences.json");
+
+        sc.AddSingleton<IExportPathPreferenceStore>(_ => new JsonExportPathPreferenceStore(prefsPath));
+        sc.AddSingleton<IDialogService, WpfDialogService>();
+        sc.AddSingleton<IFileSaveDialog, WpfSaveExcelFileDialog>();
+        sc.AddSingleton<IExcelMaterialExporter, ClosedXmlMaterialExcelExporter>();
+        sc.AddSingleton<IDebouncer>(_ => new WpfDebouncer(Dispatcher.CurrentDispatcher));
+
+        sc.AddSingleton(sp =>
+        {
+            var conn = new SqliteConnection($"Data Source={dbPath}");
+            conn.Open();
+            SqliteSchema.EnsureCreated(conn);
+            return conn;
+        });
+
+        sc.AddTransient<SqliteUnitOfWork>();
+        sc.AddTransient<SqliteMaterialRepository>();
+        sc.AddTransient(sp =>
+            new MaterialApplicationService(
+                sp.GetRequiredService<SqliteUnitOfWork>(),
+                sp.GetRequiredService<SqliteMaterialRepository>(),
+                sp.GetRequiredService<IExcelMaterialExporter>()));
+
+        sc.AddSingleton<MainViewModel>();
+
+        Services = sc.BuildServiceProvider();
+
+        var window = new MainWindow
+        {
+            DataContext = Services.GetRequiredService<MainViewModel>()
+        };
+        window.Show();
+    }
 }

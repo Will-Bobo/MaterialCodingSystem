@@ -19,6 +19,20 @@ public static class JsonUtil
     {
         if (v is null) return null;
 
+        if (v is Exception ex)
+        {
+            // Keep replay compare deterministic and JSON-serializable.
+            var code = ex is ValidationException vex ? vex.Code : ex.GetType().Name;
+            return new SortedDictionary<string, object?>
+            {
+                ["error"] = new SortedDictionary<string, object?>
+                {
+                    ["code"] = code,
+                    ["message"] = ex.Message
+                }
+            };
+        }
+
         if (v is IDictionary<string, object?> dso)
         {
             var sorted = new SortedDictionary<string, object?>();

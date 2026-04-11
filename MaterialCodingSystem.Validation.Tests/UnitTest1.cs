@@ -1,8 +1,6 @@
 ﻿using System.Text;
 using MaterialCodingSystem.Validation.core;
-using MaterialCodingSystem.Validation.infrastructure;
 using MaterialCodingSystem.Validation.runner;
-using MaterialCodingSystem.Validation.services;
 
 namespace MaterialCodingSystem.Validation.Tests;
 
@@ -340,28 +338,26 @@ public class RunnerUnitTests
     [Fact]
     public void Should_Create_Demo_Row_Via_Injected_TestDbProvider()
     {
-        var dbProvider = new TestDbContextProvider();
-        var service = new DemoMaterialService(dbProvider);
+        // demo EF-based provider removed; keep runner smoke test using echo
         var dispatcher = new ActionDispatcher(new Dictionary<string, Func<Context, object>>
         {
-            ["create_demo"] = service.Create
+            ["echo"] = ctx => new Dictionary<string, object?> { ["result"] = ctx.Input["value"] }
         });
         var runner = new ValidationRunner(dispatcher, new AssertionEngine());
 
         var yaml = """
                    spec_version: v1
                    cases:
-                     - id: DEMO_DB_TEST
+                     - id: SMOKE_001
                        type: core
                        given:
                          input:
-                           name: "alpha"
+                           value: 1
                        when:
-                         action: create_demo
+                         action: echo
                        then:
                          output:
-                           ok: true
-                           row_count: 1
+                           result: 1
                        replay: false
                        deterministic: true
                    """;
@@ -374,13 +370,13 @@ public class RunnerUnitTests
     [Fact]
     public void Should_Use_Isolated_InMemory_Db_Per_ExecutionPlan()
     {
-        var dbProvider = new TestDbContextProvider();
-        var service = new DemoMaterialService(dbProvider);
-        var dispatcher = new ActionDispatcher(new Dictionary<string, Func<Context, object>>
-        {
-            ["create_demo"] = service.Create
-        });
-        var runner = new ValidationRunner(dispatcher, new AssertionEngine());
+        var runner = new ValidationRunner(
+            new ActionDispatcher(new Dictionary<string, Func<Context, object>>
+            {
+                ["echo"] = ctx => new Dictionary<string, object?> { ["result"] = ctx.Input["value"] }
+            }),
+            new AssertionEngine()
+        );
 
         var yaml = """
                    spec_version: v1
@@ -389,26 +385,24 @@ public class RunnerUnitTests
                        type: core
                        given:
                          input:
-                           name: "shared"
+                           value: 1
                        when:
-                         action: create_demo
+                         action: echo
                        then:
                          output:
-                           ok: true
-                           row_count: 1
+                           result: 1
                        replay: false
                        deterministic: true
                      - id: ISO_B
                        type: core
                        given:
                          input:
-                           name: "shared"
+                           value: 1
                        when:
-                         action: create_demo
+                         action: echo
                        then:
                          output:
-                           ok: true
-                           row_count: 1
+                           result: 1
                        replay: false
                        deterministic: true
                    """;

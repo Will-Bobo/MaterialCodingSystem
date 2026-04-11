@@ -1,5 +1,6 @@
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
+using System.Text.RegularExpressions;
 
 namespace MaterialCodingSystem.Validation.core;
 
@@ -13,6 +14,8 @@ public sealed class YamlExecutionPlanParser
 
     public IReadOnlyList<(string CaseId, ExecutionPlan Plan)> ParseYaml(string yaml)
     {
+        yaml = MergeDuplicateTopLevelCases(yaml);
+
         var deserializer = new DeserializerBuilder()
             .WithNamingConvention(UnderscoredNamingConvention.Instance)
             .Build();
@@ -29,11 +32,31 @@ public sealed class YamlExecutionPlanParser
 
             var err = c.Then?.Error;
             if (err != null)
-                assertions.Add(new AssertionSpec.ExpectError(err.ShouldThrow, err.Code));
+            {
+                var shouldThrow = err.ShouldThrow ?? true; // PRD_V1 默认：出现 error 即表示应抛错
+                assertions.Add(new AssertionSpec.ExpectError(shouldThrow, err.Code));
+            }
 
             var output = c.Then?.Output;
             if (output != null)
                 assertions.Add(new AssertionSpec.ExpectResultEquals(NormalizeScalars(output)));
+
+            // PRD_V1: DB exists assertions (minimal support)
+            var dbThen = c.Then?.Db;
+            if (dbThen is not null)
+            {
+                var normalized = NormalizeScalars(dbThen) as Dictionary<string, object?>;
+                if (normalized is not null)
+                {
+                    foreach (var (table, specObj) in normalized)
+                    {
+                        if (specObj is not Dictionary<string, object?> specMap) continue;
+                        if (!specMap.TryGetValue("exists", out var existsObj)) continue;
+                        if (existsObj is not Dictionary<string, object?> where) continue;
+                        assertions.Add(new AssertionSpec.ExpectDbExists(table, where));
+                    }
+                }
+            }
 
             var plan = new ExecutionPlan
             {
@@ -51,6 +74,24 @@ public sealed class YamlExecutionPlanParser
         }
 
         return list;
+    }
+
+    private static string MergeDuplicateTopLevelCases(string yaml)
+    {
+        // Some specs contain duplicated top-level `cases:` keys. YAML parser keeps the last one,
+        // so we merge them by stitching case lists into a single `cases:` block.
+        var matches = Regex.Matches(yaml, @"(?m)^\s*cases:\s*$");
+        if (matches.Count <= 1) return yaml;
+
+        // Keep everything up to (but not including) the second "cases:" line,
+        // then append the content after that second "cases:" line.
+        var secondIdx = matches[1].Index;
+        var secondLineLength = matches[1].Length;
+
+        var head = yaml.Substring(0, secondIdx);
+        var tail = yaml.Substring(secondIdx + secondLineLength);
+
+        return head + tail;
     }
 
     private static object? NormalizeScalars(object? v)

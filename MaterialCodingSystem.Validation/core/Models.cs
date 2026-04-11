@@ -42,7 +42,7 @@ public class Then
 
 public class ErrorExpectation
 {
-    public bool ShouldThrow { get; set; }
+    public bool? ShouldThrow { get; set; }
     public string? Code { get; set; }
 }
 

@@ -1,24 +1,24 @@
-﻿using System.Text;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+﻿using System.Windows;
+using MaterialCodingSystem.Presentation.ViewModels;
 
-namespace MaterialCodingSystem
+namespace MaterialCodingSystem;
+
+public partial class MainWindow : Window
 {
-	/// <summary>
-	/// Interaction logic for MainWindow.xaml
-	/// </summary>
-	public partial class MainWindow : Window
-	{
-		public MainWindow()
-		{
-			InitializeComponent();
-		}
-	}
+    public MainWindow()
+    {
+        InitializeComponent();
+    }
+
+    private void SpecField_OnGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel m)
+            m.CreateMaterial.NotifySpecFieldFocused();
+    }
+
+    private void DescriptionField_OnGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel m)
+            m.CreateMaterial.NotifyDescriptionFieldFocused();
+    }
 }
