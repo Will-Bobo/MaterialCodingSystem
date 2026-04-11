@@ -19,6 +19,15 @@ public sealed class CreateReplacementViewModel : ViewModelBase
     private string _groupInfo = "";
     public string GroupInfo { get => _groupInfo; set => SetProperty(ref _groupInfo, value); }
 
+    private string _groupCodeDisplay = "";
+    public string GroupCodeDisplay { get => _groupCodeDisplay; set => SetProperty(ref _groupCodeDisplay, value); }
+
+    private string _existingSuffixDisplay = "";
+    public string ExistingSuffixDisplay { get => _existingSuffixDisplay; set => SetProperty(ref _existingSuffixDisplay, value); }
+
+    private string _nextSuffixDisplay = "";
+    public string NextSuffixDisplay { get => _nextSuffixDisplay; set => SetProperty(ref _nextSuffixDisplay, value); }
+
     private string _embeddedCodeKeyword = "";
     public string EmbeddedCodeKeyword { get => _embeddedCodeKeyword; set => SetProperty(ref _embeddedCodeKeyword, value); }
 
@@ -60,7 +69,7 @@ public sealed class CreateReplacementViewModel : ViewModelBase
         _dialogService = dialogService;
         CreateCommand = new RelayCommand(async () => await CreateAsync());
         ResolveGroupCommand = new RelayCommand(async () => await ResolveGroupAndReportAsync());
-        LoadGroupInfoCommand = new RelayCommand(async () => await LoadGroupInfoAsync());
+        LoadGroupInfoCommand = new RelayCommand(async () => await LoadGroupInfoCoreAsync());
         EmbeddedCodeSearchCommand = new RelayCommand(async () => await EmbeddedSearchByCodeAsync());
         PickEmbeddedCodeHitCommand = new RelayCommand<MaterialItemSummary>(async hit =>
         {
@@ -82,12 +91,20 @@ public sealed class CreateReplacementViewModel : ViewModelBase
 
         GroupId = res.Data;
         Result = $"已定位：GroupId={GroupId}";
-        await LoadGroupInfoAsync();
+        await LoadGroupInfoCoreAsync();
     }
 
-    private async Task LoadGroupInfoAsync()
+    public async Task LoadGroupInfoAsync()
+    {
+        await LoadGroupInfoCoreAsync();
+    }
+
+    private async Task LoadGroupInfoCoreAsync()
     {
         GroupInfo = "加载组信息中...";
+        GroupCodeDisplay = "";
+        ExistingSuffixDisplay = "";
+        NextSuffixDisplay = "";
         var res = await _app.GetGroupInfo(GroupId);
         if (!res.IsSuccess)
         {
@@ -97,6 +114,12 @@ public sealed class CreateReplacementViewModel : ViewModelBase
 
         var d = res.Data!;
         GroupInfo = $"category={d.CategoryCode} serial={d.SerialNo} 已用suffix=[{d.ExistingSuffixes}] 下一个={d.NextSuffix}";
+        GroupCodeDisplay = $"Group: {d.CategoryCode}{d.SerialNo:D7}";
+        var suffixParts = d.ExistingSuffixes.OrderBy(c => c).Select(c => c.ToString()).ToArray();
+        ExistingSuffixDisplay = suffixParts.Length == 0
+            ? "已有替代料: （无）"
+            : $"已有替代料: {string.Join(" / ", suffixParts)}";
+        NextSuffixDisplay = $"将创建: {d.NextSuffix}";
     }
 
     private async Task EmbeddedSearchByCodeAsync()
@@ -146,7 +169,7 @@ public sealed class CreateReplacementViewModel : ViewModelBase
         if (res.IsSuccess)
         {
             Result = $"创建成功：{res.Data!.Code}（suffix={res.Data.Suffix}）";
-            await LoadGroupInfoAsync();
+            await LoadGroupInfoCoreAsync();
             return;
         }
 

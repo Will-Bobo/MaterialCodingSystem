@@ -28,17 +28,18 @@ public sealed class CreateMaterialViewModelTests
     public async Task When_spec_field_active_uses_spec_as_search_keyword()
     {
         var repo = new FakeMaterialRepository();
-        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "PART", "DESC", "N", null));
+        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "PART", "DESC", "N", null, 1));
         var app = new MaterialApplicationService(new NoopUnitOfWork(), repo);
         var vm = new CreateMaterialViewModel(
             app,
             new SynchronousDebouncer(),
             new NoopDialogService(),
             _ => Task.CompletedTask,
+            _ => Task.CompletedTask,
             () => Task.CompletedTask);
 
         await Task.Delay(150);
-        vm.CategoryCode = "ZDA";
+        vm.SelectedCategory = vm.Categories.First(c => c.Code == "ZDA");
         vm.NotifySpecFieldFocused();
         vm.Spec = "PART";
 
@@ -52,17 +53,18 @@ public sealed class CreateMaterialViewModelTests
     {
         var repo = new FakeMaterialRepository();
         repo.CategoryRows.Add(("ZDB", "电容"));
-        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "P", "10UF 16V", "N", null));
+        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "P", "10UF 16V", "N", null, 1));
         var app = new MaterialApplicationService(new NoopUnitOfWork(), repo);
         var vm = new CreateMaterialViewModel(
             app,
             new SynchronousDebouncer(),
             new NoopDialogService(),
             _ => Task.CompletedTask,
+            _ => Task.CompletedTask,
             () => Task.CompletedTask);
 
         await Task.Delay(150);
-        vm.CategoryCode = "ZDB";
+        vm.SelectedCategory = vm.Categories.First(c => c.Code == "ZDB");
         vm.NotifyDescriptionFieldFocused();
         vm.Description = "10UF 16V";
 
@@ -82,10 +84,11 @@ public sealed class CreateMaterialViewModelTests
             new SynchronousDebouncer(),
             new NoopDialogService(),
             _ => Task.CompletedTask,
+            _ => Task.CompletedTask,
             () => Task.CompletedTask);
 
         await Task.Delay(150);
-        vm.CategoryCode = "ZDA";
+        vm.SelectedCategory = vm.Categories.First(c => c.Code == "ZDA");
         vm.Spec = "DUP";
         vm.Name = "n";
         vm.Description = "d";

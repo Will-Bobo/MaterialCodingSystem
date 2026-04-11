@@ -14,6 +14,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     private readonly IDebouncer _debouncer;
     private readonly IDialogService _dialogService;
     private readonly Func<string, Task> _navigateToReplacementByCode;
+    private readonly Func<MaterialItemSpecHit, Task> _navigateToReplacementFromCandidate;
     private readonly Func<Task> _openAddCategoryDialog;
 
     public ObservableCollection<CategoryDto> Categories { get; } = new();
@@ -26,16 +27,9 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         set
         {
             if (SetProperty(ref _selectedCategory, value))
-            {
-                if (value is not null)
-                    CategoryCode = value.Code;
                 ScheduleCandidateRefresh();
-            }
         }
     }
-
-    private string _categoryCode = "";
-    public string CategoryCode { get => _categoryCode; set => SetProperty(ref _categoryCode, value); }
 
     private MaterialSearchKeywordSource _keywordSource = MaterialSearchKeywordSource.None;
     public MaterialSearchKeywordSource KeywordSource
@@ -107,6 +101,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     public RelayCommand RefreshCategoriesCommand { get; }
     public RelayCommand OpenAddCategoryCommand { get; }
     public RelayCommand<MaterialItemSpecHit> AddCandidateAsReplacementCommand { get; }
+    public RelayCommand<MaterialItemSpecHit> UseCandidateAsReplacementCommand { get; }
     public RelayCommand ForceNewMaterialCommand { get; }
 
     public CreateMaterialViewModel(
@@ -114,12 +109,14 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         IDebouncer debouncer,
         IDialogService dialogService,
         Func<string, Task> navigateToReplacementByCode,
+        Func<MaterialItemSpecHit, Task> navigateToReplacementFromCandidate,
         Func<Task> openAddCategoryDialog)
     {
         _app = app;
         _debouncer = debouncer;
         _dialogService = dialogService;
         _navigateToReplacementByCode = navigateToReplacementByCode;
+        _navigateToReplacementFromCandidate = navigateToReplacementFromCandidate;
         _openAddCategoryDialog = openAddCategoryDialog;
 
         CreateCommand = new RelayCommand(async () => await CreateAsync());
@@ -129,6 +126,11 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         {
             if (hit is not null)
                 await _navigateToReplacementByCode(hit.Code);
+        });
+        UseCandidateAsReplacementCommand = new RelayCommand<MaterialItemSpecHit>(async hit =>
+        {
+            if (hit is not null)
+                await _navigateToReplacementFromCandidate(hit);
         });
         ForceNewMaterialCommand = new RelayCommand(() =>
         {
@@ -159,7 +161,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         }
 
         var keyword = KeywordSource == MaterialSearchKeywordSource.Spec ? Spec : Description;
-        if (string.IsNullOrWhiteSpace(CategoryCode) || string.IsNullOrWhiteSpace(keyword))
+        var categoryCode = SelectedCategory?.Code?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(categoryCode) || string.IsNullOrWhiteSpace(keyword))
         {
             CandidateStatus = "请选择分类并输入关键字。";
             return;
@@ -171,7 +174,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             var res = await _app.SearchBySpec(new SearchQuery(
                 CodeKeyword: null,
                 SpecKeyword: keyword.Trim(),
-                CategoryCode: CategoryCode.Trim(),
+                CategoryCode: categoryCode,
                 IncludeDeprecated: false,
                 Limit: 20,
                 Offset: 0));
@@ -217,7 +220,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         foreach (var c in res.Data!)
             Categories.Add(c);
 
-        SelectedCategory = Categories.FirstOrDefault(x => x.Code == CategoryCode) ?? Categories.FirstOrDefault();
+        var prev = SelectedCategory?.Code;
+        SelectedCategory = Categories.FirstOrDefault(x => x.Code == prev) ?? Categories.FirstOrDefault();
     }
 
     private async Task CreateAsync()
@@ -225,8 +229,15 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         SpecFieldError = "";
         GlobalError = "";
         Result = "处理中...";
+        var categoryCode = SelectedCategory?.Code?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(categoryCode))
+        {
+            Result = "请先选择分类。";
+            return;
+        }
+
         var res = await _app.CreateMaterialItemA(new CreateMaterialItemARequest(
-            CategoryCode: CategoryCode,
+            CategoryCode: categoryCode,
             Spec: Spec,
             Name: Name,
             Description: Description,

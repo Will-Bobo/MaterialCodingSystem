@@ -21,20 +21,8 @@ public sealed class SearchViewModel : ViewModelBase
     public CategoryDto? SelectedCategory
     {
         get => _selectedCategory;
-        set
-        {
-            if (SetProperty(ref _selectedCategory, value))
-            {
-                if (value is not null)
-                {
-                    CategoryCode = value.Code;
-                }
-            }
-        }
+        set => SetProperty(ref _selectedCategory, value);
     }
-
-    private string _categoryCode = "ZDA";
-    public string CategoryCode { get => _categoryCode; set => SetProperty(ref _categoryCode, value); }
 
     private bool _includeDeprecated;
     public bool IncludeDeprecated { get => _includeDeprecated; set => SetProperty(ref _includeDeprecated, value); }
@@ -88,7 +76,8 @@ public sealed class SearchViewModel : ViewModelBase
             Categories.Add(c);
         }
 
-        SelectedCategory = Categories.FirstOrDefault(x => x.Code == CategoryCode) ?? Categories.FirstOrDefault();
+        var prev = SelectedCategory?.Code;
+        SelectedCategory = Categories.FirstOrDefault(x => x.Code == prev) ?? Categories.FirstOrDefault();
     }
 
     private async Task SearchByCodeAsync()
@@ -121,10 +110,17 @@ public sealed class SearchViewModel : ViewModelBase
         SpecResults.Clear();
         SelectedSpecResult = null;
 
+        var categoryCode = SelectedCategory?.Code?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(categoryCode))
+        {
+            Message = "请先选择分类。";
+            return;
+        }
+
         var res = await _app.SearchBySpec(new SearchQuery(
             CodeKeyword: null,
             SpecKeyword: SpecKeyword,
-            CategoryCode: CategoryCode,
+            CategoryCode: categoryCode,
             IncludeDeprecated: IncludeDeprecated,
             Limit: 20,
             Offset: 0

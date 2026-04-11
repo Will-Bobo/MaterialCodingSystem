@@ -1,5 +1,6 @@
 using MaterialCodingSystem;
 using MaterialCodingSystem.Application;
+using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
 using MaterialCodingSystem.Presentation.Scheduling;
 using MaterialCodingSystem.Presentation.Services;
@@ -33,6 +34,7 @@ public sealed class MainViewModel : ViewModelBase
             debouncer,
             dialogService,
             NavigateToReplacementFromExistingCodeAsync,
+            NavigateToReplacementFromCandidateAsync,
             OpenAddCategoryDialog);
 
         CreateReplacement = new CreateReplacementViewModel(app, dialogService);
@@ -56,5 +58,12 @@ public sealed class MainViewModel : ViewModelBase
         SelectedTabIndex = 1;
         CreateReplacement.ExistingItemCode = existingCode;
         await CreateReplacement.ResolveGroupAndReportAsync();
+    }
+
+    public async Task NavigateToReplacementFromCandidateAsync(MaterialItemSpecHit hit)
+    {
+        SelectedTabIndex = 1;
+        CreateReplacement.GroupId = (int)hit.GroupId;
+        await CreateReplacement.LoadGroupInfoAsync();
     }
 }

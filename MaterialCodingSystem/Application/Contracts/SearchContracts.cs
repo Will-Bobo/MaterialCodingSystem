@@ -11,7 +11,7 @@ public sealed record SearchQuery(
 
 public sealed record MaterialItemSummary(string Code, string Name, string Spec, string? Brand);
 
-public sealed record MaterialItemSpecHit(string Code, string Spec, string Description, string Name, string? Brand);
+public sealed record MaterialItemSpecHit(string Code, string Spec, string Description, string Name, string? Brand, long GroupId);
 
 public sealed record PagedResult<T>(int Total, IReadOnlyList<T> Items);
 

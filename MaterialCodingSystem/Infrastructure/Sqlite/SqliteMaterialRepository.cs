@@ -252,7 +252,7 @@ LIMIT @limit OFFSET @offset;";
     public async Task<PagedResult<MaterialItemSpecHit>> SearchBySpecAsync(SearchQuery query, CancellationToken ct = default)
     {
         var sql = @"
-SELECT code AS Code, spec AS Spec, description AS Description, name AS Name, brand AS Brand
+SELECT code AS Code, spec AS Spec, description AS Description, name AS Name, brand AS Brand, group_id AS GroupId
 FROM material_item
 WHERE category_code = @categoryCode
   AND status = 1
