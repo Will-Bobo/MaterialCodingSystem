@@ -21,6 +21,19 @@ public class DeprecateMaterialTests
     }
 
     [Fact]
+    public async Task Deprecate_WhenAlreadyDeprecated_ReturnsOkWithoutThrowing()
+    {
+        var repo = new FakeMaterialRepository { ItemExistsByCode = true, ItemStatusByCode = 0 };
+        var app = new MaterialApplicationService(uow: new NoopUnitOfWork(), repo: repo);
+
+        var res = await app.DeprecateMaterialItem(new DeprecateRequest(Code: "ZDA0000001A"));
+
+        Assert.True(res.IsSuccess);
+        Assert.Equal(0, res.Data!.Status);
+        Assert.Equal(0, repo.DeprecateCalled);
+    }
+
+    [Fact]
     public async Task Deprecate_Success_UpdatesStatusToDeprecated()
     {
         var repo = new FakeMaterialRepository { ItemExistsByCode = true, ItemStatusByCode = 1 };

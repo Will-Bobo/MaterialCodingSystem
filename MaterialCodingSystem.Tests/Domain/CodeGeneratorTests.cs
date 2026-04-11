@@ -13,5 +13,29 @@ public class CodeGeneratorTests
         var actual = CodeGenerator.GenerateItemCode(categoryCode, serialNo, suffix);
         Assert.Equal(expected, actual);
     }
+
+    [Fact]
+    public void GenerateItemCode_EmptyCategory_ThrowsValidationError()
+    {
+        var ex = Assert.Throws<DomainException>(() => CodeGenerator.GenerateItemCode(" ", 1, 'A'));
+        Assert.Equal("VALIDATION_ERROR", ex.Code);
+    }
+
+    [Fact]
+    public void GenerateItemCode_NonPositiveSerial_ThrowsValidationError()
+    {
+        var ex = Assert.Throws<DomainException>(() => CodeGenerator.GenerateItemCode("ZDA", 0, 'A'));
+        Assert.Equal("VALIDATION_ERROR", ex.Code);
+    }
+
+    [Theory]
+    [InlineData('@')]
+    [InlineData('a')]
+    [InlineData('1')]
+    public void GenerateItemCode_InvalidSuffix_ThrowsValidationError(char suffix)
+    {
+        var ex = Assert.Throws<DomainException>(() => CodeGenerator.GenerateItemCode("ZDA", 1, suffix));
+        Assert.Equal("VALIDATION_ERROR", ex.Code);
+    }
 }
 

@@ -32,5 +32,25 @@ public class SuffixAllocatorTests
         var ex = Assert.Throws<DomainException>(() => SuffixAllocator.AllocateNextSuffix(all));
         Assert.Equal("SUFFIX_OVERFLOW", ex.Code);
     }
+
+    [Fact]
+    public void AllocateNextSuffix_NotStartingWithA_ThrowsSequenceBroken()
+    {
+        var ex = Assert.Throws<DomainException>(() => SuffixAllocator.AllocateNextSuffix(new[] { 'B', 'C' }));
+        Assert.Equal("SUFFIX_SEQUENCE_BROKEN", ex.Code);
+    }
+
+    [Fact]
+    public void AllocateNextSuffix_SingleA_ReturnsB()
+    {
+        Assert.Equal('B', SuffixAllocator.AllocateNextSuffix(new[] { 'A' }));
+    }
+
+    [Fact]
+    public void AllocateNextSuffix_DuplicateEntries_BreaksContinuity_ThrowsSequenceBroken()
+    {
+        var ex = Assert.Throws<DomainException>(() => SuffixAllocator.AllocateNextSuffix(new[] { 'A', 'A' }));
+        Assert.Equal("SUFFIX_SEQUENCE_BROKEN", ex.Code);
+    }
 }
 

@@ -8,6 +8,26 @@ namespace MaterialCodingSystem.Tests.Application;
 public class CreateMaterialItemATests
 {
     [Fact]
+    public async Task CreateA_WhenSpecEmpty_ReturnsValidationError()
+    {
+        var app = new MaterialApplicationService(
+            uow: new NoopUnitOfWork(),
+            repo: new FakeMaterialRepository { CategoryExists = true, SpecExists = false }
+        );
+
+        var res = await app.CreateMaterialItemA(new CreateMaterialItemARequest(
+            CategoryCode: "ZDA",
+            Spec: "   ",
+            Name: "n",
+            Description: "d",
+            Brand: "b"
+        ));
+
+        Assert.False(res.IsSuccess);
+        Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error!.Code);
+    }
+
+    [Fact]
     public async Task CreateA_WhenCategoryNotFound_ReturnsValidationError()
     {
         var app = new MaterialApplicationService(

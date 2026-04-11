@@ -2,7 +2,14 @@ using MaterialCodingSystem.Validation.core;
 
 namespace MaterialCodingSystem.Validation.runner;
 
-// Execution Engine: only executes ExecutionPlan
+/// <summary>
+/// Spec Runner：将 YAML 用例映射为
+/// <list type="bullet">
+/// <item><description><b>Given</b> → <see cref="SqliteDbFixture.Reset"/> + <see cref="SqliteDbFixture.Seed"/>（独占 <c>:memory:</c> 单连接）</description></item>
+/// <item><description><b>When</b> → <see cref="ActionDispatcher.Dispatch"/>（业务动作应调用 <c>MaterialApplicationService</c> 等 Application API）</description></item>
+/// <item><description><b>Then</b> → <see cref="AssertionEngine.Assert"/>（output / error / db exists）</description></item>
+/// </list>
+/// </summary>
 public sealed class ValidationRunner
 {
     private readonly ActionDispatcher _dispatcher;

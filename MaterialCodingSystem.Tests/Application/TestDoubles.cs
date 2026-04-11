@@ -48,9 +48,16 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
     public Task<bool> CategoryExistsAsync(CategoryCode categoryCode, CancellationToken ct = default)
         => Task.FromResult(CategoryExists);
 
+    /// <summary>若设置，则 <see cref="InsertCategoryAsync"/> 抛出与 SQLite 类似的唯一约束信息，供 CreateCategory 映射测试使用。</summary>
+    public string? InsertCategoryConstraintViolationMessage { get; set; }
+
     public Task InsertCategoryAsync(string code, string name, CancellationToken ct = default)
     {
-        // 测试中按需覆盖；默认认为可插入
+        if (InsertCategoryConstraintViolationMessage is not null)
+        {
+            throw new DbConstraintViolationException("UNIQUE(category)", InsertCategoryConstraintViolationMessage);
+        }
+
         return Task.CompletedTask;
     }
 

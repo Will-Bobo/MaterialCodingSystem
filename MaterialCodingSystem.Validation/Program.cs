@@ -37,13 +37,21 @@ class Program
 
         var runner = new ValidationRunner(dispatcher, new AssertionEngine());
 
+        var fail = 0;
+        var pass = 0;
         foreach (var (caseId, plan) in cases)
         {
             var r = runner.Run(plan);
+            if (r.Passed) pass++;
+            else fail++;
+
             Console.WriteLine($"Case: {caseId}");
             Console.WriteLine($"Result: {(r.Passed ? "PASS" : "FAIL")}");
             if (!r.Passed) Console.WriteLine($"Reason: {r.Reason}");
             Console.WriteLine();
         }
+
+        Console.WriteLine($"Summary: PASS={pass}, FAIL={fail}, Total={cases.Count}");
+        Environment.Exit(fail > 0 ? 1 : 0);
     }
 }

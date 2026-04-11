@@ -21,4 +21,20 @@ public class SpecNormalizerTests
         var actual = SpecNormalizer.NormalizeV1(null);
         Assert.Equal(string.Empty, actual);
     }
+
+    [Theory]
+    [InlineData("", "")]
+    [InlineData("   ", "")]
+    [InlineData("\r\na\r\n", "A")]
+    [InlineData("a\u00A0b", "A B")] // NBSP treated as whitespace → single space
+    public void Normalize_V1_EdgeCases(string input, string expected)
+    {
+        Assert.Equal(expected, SpecNormalizer.NormalizeV1(input));
+    }
+
+    [Fact]
+    public void Normalize_V1_OnlyUnicodeLetters_Uppercases()
+    {
+        Assert.Equal("ÄBC", SpecNormalizer.NormalizeV1(" äbc "));
+    }
 }

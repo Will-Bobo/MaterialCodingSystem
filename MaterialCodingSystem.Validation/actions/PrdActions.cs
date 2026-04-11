@@ -13,8 +13,10 @@ public static class PrdActions
     public static object NormalizeSpec(Context ctx)
     {
         var raw = ctx.Input["description"]?.ToString();
-        var normalized = MaterialCodingSystem.Domain.Services.SpecNormalizer.NormalizeV1(raw);
-        return new Dictionary<string, object?> { ["spec_normalized"] = normalized };
+        var res = MaterialSpecQueriesV1.NormalizeDescriptionToSpecNormalized(raw);
+        if (!res.IsSuccess)
+            throw new ValidationException(res.Error!.Code, res.Error.Message);
+        return new Dictionary<string, object?> { ["spec_normalized"] = res.Data! };
     }
 
     public static object CreateMaterialA(Context ctx)

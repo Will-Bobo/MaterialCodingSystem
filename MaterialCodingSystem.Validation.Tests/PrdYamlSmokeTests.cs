@@ -72,5 +72,42 @@ public class PrdYamlSmokeTests
         var r = new ValidationRunner(dispatcher, new AssertionEngine()).Run(plan);
         Assert.True(r.Passed, r.Reason);
     }
+
+    [Fact]
+    public void PrdV1_Yaml_All_Cases_Pass()
+    {
+        var path = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..",
+            "MaterialCodingSystem.Validation", "specs", "PRD_V1.yaml"
+        ));
+
+        var cases = new YamlExecutionPlanParser().ParseFile(path);
+        var dispatcher = new ActionDispatcher(new Dictionary<string, Func<Context, object>>
+        {
+            ["echo"] = BuiltInActions.Echo,
+            ["normalize_spec"] = PrdActions.NormalizeSpec,
+            ["create_material_A"] = PrdActions.CreateMaterialA,
+            ["create_material_replacement"] = PrdActions.CreateMaterialReplacement,
+            ["generate_material_code"] = PrdActions.GenerateMaterialCode,
+            ["format_serial"] = PrdActions.FormatSerial,
+            ["update_status"] = PrdActions.UpdateStatus,
+            ["update_group"] = PrdActions.UpdateGroup,
+            ["allocate_group_serial"] = PrdActions.AllocateGroupSerial,
+            ["create_material_A_batch"] = PrdActions.CreateMaterialABatch,
+            ["create_material_A_concurrent"] = PrdActions.CreateMaterialAConcurrent,
+        });
+
+        var runner = new ValidationRunner(dispatcher, new AssertionEngine());
+        var failures = new List<string>();
+        foreach (var (caseId, plan) in cases)
+        {
+            var r = runner.Run(plan);
+            if (!r.Passed)
+                failures.Add($"{caseId}: {r.Reason}");
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
 }
 
