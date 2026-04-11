@@ -11,12 +11,24 @@ public sealed class SqliteMaterialRepository : IMaterialRepository
 {
     private readonly SqliteConnection _connection;
 
+    /// <summary>
+    /// MUST be used within <see cref="SqliteUnitOfWork"/> for all write operations (INSERT/UPDATE/DELETE).
+    /// </summary>
     public SqliteMaterialRepository(SqliteConnection connection)
     {
         _connection = connection;
     }
 
     private SqliteTransaction? Tx => AmbientSqliteContext.CurrentTransaction;
+
+    private static void EnsureWriteTransaction()
+    {
+        if (AmbientSqliteContext.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException(
+                "Write operation must be executed within a transaction.");
+        }
+    }
 
     public async Task<bool> CategoryExistsAsync(CategoryCode categoryCode, CancellationToken ct = default)
     {
@@ -28,6 +40,7 @@ public sealed class SqliteMaterialRepository : IMaterialRepository
 
     public async Task InsertCategoryAsync(string code, string name, CancellationToken ct = default)
     {
+        EnsureWriteTransaction();
         var sql = "INSERT INTO category(code, name) VALUES (@code, @name);";
         try
         {
@@ -69,6 +82,7 @@ WHERE category_code = @categoryCode;";
 
     public async Task<int> InsertGroupAsync(CategoryCode categoryCode, int serialNo, CancellationToken ct = default)
     {
+        EnsureWriteTransaction();
         var sql = @"
 INSERT INTO material_group(category_id, category_code, serial_no)
 VALUES ((SELECT id FROM category WHERE code=@categoryCode), @categoryCode, @serialNo);
@@ -88,6 +102,7 @@ SELECT last_insert_rowid();";
 
     public async Task InsertItemAsync(int groupId, MaterialItem item, CancellationToken ct = default)
     {
+        EnsureWriteTransaction();
         var sql = @"
 INSERT INTO material_item(
   group_id, category_id, category_code,
@@ -182,6 +197,7 @@ WHERE mg.id = @groupId;";
 
     public async Task DeprecateByCodeAsync(string code, CancellationToken ct = default)
     {
+        EnsureWriteTransaction();
         var sql = "UPDATE material_item SET status=0 WHERE code=@code;";
         var rows = await _connection.ExecuteAsync(new CommandDefinition(
             sql, new { code }, transaction: Tx, cancellationToken: ct));

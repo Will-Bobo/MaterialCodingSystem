@@ -6,7 +6,6 @@ using MaterialCodingSystem.Infrastructure.Sqlite;
 using MaterialCodingSystem.Presentation.Scheduling;
 using MaterialCodingSystem.Presentation.Services;
 using MaterialCodingSystem.Presentation.ViewModels;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using System.IO;
 using System.Windows;
@@ -37,13 +36,7 @@ public partial class App : System.Windows.Application
         sc.AddSingleton<IExcelMaterialExporter, ClosedXmlMaterialExcelExporter>();
         sc.AddSingleton<IDebouncer>(_ => new WpfDebouncer(Dispatcher.CurrentDispatcher));
 
-        sc.AddSingleton(sp =>
-        {
-            var conn = new SqliteConnection($"Data Source={dbPath}");
-            conn.Open();
-            SqliteSchema.EnsureCreated(conn);
-            return conn;
-        });
+        sc.AddPersistence(dbPath);
 
         sc.AddTransient<SqliteUnitOfWork>();
         sc.AddTransient<SqliteMaterialRepository>();

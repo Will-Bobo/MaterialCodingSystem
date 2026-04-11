@@ -1,4 +1,8 @@
-﻿using MaterialCodingSystem.Validation.actions;
+﻿// NOTE:
+// This project is a validation tool.
+// Dapper usage here is allowed and not restricted by main architecture rules.
+
+using MaterialCodingSystem.Validation.actions;
 using MaterialCodingSystem.Validation.core;
 using MaterialCodingSystem.Validation.runner;
 

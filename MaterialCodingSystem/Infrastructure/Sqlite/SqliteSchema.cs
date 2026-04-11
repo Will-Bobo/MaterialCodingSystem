@@ -7,6 +7,7 @@ public static class SqliteSchema
 {
     public static void EnsureCreated(SqliteConnection conn)
     {
+        using var tx = conn.BeginTransaction();
         conn.Execute("""
                      CREATE TABLE IF NOT EXISTS category (
                        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,7 +63,9 @@ public static class SqliteSchema
                      CREATE INDEX IF NOT EXISTS idx_item_category_spec_norm ON material_item(category_code, spec_normalized);
                      CREATE INDEX IF NOT EXISTS idx_material_item_group_id ON material_item(group_id);
                      CREATE INDEX IF NOT EXISTS idx_material_item_status ON material_item(status);
-                     """);
+                     """,
+            transaction: tx);
+        tx.Commit();
     }
 }
 

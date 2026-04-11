@@ -1,3 +1,5 @@
+// NOTE: Validation tool — Dapper/SQL here is intentional; not subject to main app layer rules.
+
 using Dapper;
 using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Contracts;
