@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows.Media;
 using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Presentation.Scheduling;
@@ -9,6 +10,17 @@ namespace MaterialCodingSystem.Presentation.ViewModels;
 public sealed class CreateMaterialViewModel : ViewModelBase
 {
     private const string CandidateDebounceKey = "create_material_candidates";
+
+    private static readonly Brush BrushGray = new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80));
+    private static readonly Brush BrushGreen = new SolidColorBrush(Color.FromRgb(0x16, 0xA3, 0x4A));
+    private static readonly Brush BrushOrange = new SolidColorBrush(Color.FromRgb(0xEA, 0x58, 0x0C));
+    private static readonly Brush BrushRed = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26));
+    private static readonly Brush BrushStateStripBgIdle = new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6));
+    private static readonly Brush BrushStateStripBgOk = new SolidColorBrush(Color.FromRgb(0xEC, 0xFD, 0xF5));
+    private static readonly Brush BrushStateStripBgWarn = new SolidColorBrush(Color.FromRgb(0xFF, 0xFB, 0xEB));
+    private static readonly Brush BrushStateStripBgRisk = new SolidColorBrush(Color.FromRgb(0xFE, 0xE2, 0xE2));
+    private static readonly Brush BrushInfoBarSurface = new SolidColorBrush(Color.FromRgb(0xFF, 0xFB, 0xEB));
+    private static readonly Brush BrushInfoBarBorder = new SolidColorBrush(Color.FromRgb(0xFD, 0xBA, 0x74));
 
     private readonly MaterialApplicationService _app;
     private readonly IDebouncer _debouncer;
@@ -64,7 +76,10 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         set
         {
             if (SetProperty(ref _spec, value))
+            {
                 ScheduleCandidateRefresh();
+                UpdateSpecInputStateHint();
+            }
         }
     }
 
@@ -89,7 +104,15 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     public string Result { get => _result; set => SetProperty(ref _result, value); }
 
     private string _specFieldError = "";
-    public string SpecFieldError { get => _specFieldError; set => SetProperty(ref _specFieldError, value); }
+    public string SpecFieldError
+    {
+        get => _specFieldError;
+        set
+        {
+            if (SetProperty(ref _specFieldError, value))
+                UpdateSpecInputStateHint();
+        }
+    }
 
     private string _globalError = "";
     public string GlobalError { get => _globalError; set => SetProperty(ref _globalError, value); }
@@ -98,16 +121,59 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     public bool CandidateLoading
     {
         get => _candidateLoading;
-        set => SetProperty(ref _candidateLoading, value);
+        set
+        {
+            if (SetProperty(ref _candidateLoading, value))
+                UpdateDecisionPresentation();
+        }
     }
 
     private string _candidateStatus = "";
     public string CandidateStatus { get => _candidateStatus; set => SetProperty(ref _candidateStatus, value); }
 
+    private string _candidateStateIcon = "🔍";
+    public string CandidateStateIcon { get => _candidateStateIcon; private set => SetProperty(ref _candidateStateIcon, value); }
+
+    private string _candidateStateMessage = "";
+    public string CandidateStateMessage { get => _candidateStateMessage; private set => SetProperty(ref _candidateStateMessage, value); }
+
+    private string _candidateStateSubMessage = "";
+    public string CandidateStateSubMessage { get => _candidateStateSubMessage; private set => SetProperty(ref _candidateStateSubMessage, value); }
+
+    private Brush _candidateStateForeground = BrushGray;
+    public Brush CandidateStateForeground { get => _candidateStateForeground; private set => SetProperty(ref _candidateStateForeground, value); }
+
+    private Brush _candidateStateStripBackground = BrushStateStripBgIdle;
+    public Brush CandidateStateStripBackground { get => _candidateStateStripBackground; private set => SetProperty(ref _candidateStateStripBackground, value); }
+
+    private Brush _decisionInfoBarBackground = BrushInfoBarSurface;
+    public Brush DecisionInfoBarBackground { get => _decisionInfoBarBackground; private set => SetProperty(ref _decisionInfoBarBackground, value); }
+
+    private Brush _decisionInfoBarBorderBrush = BrushInfoBarBorder;
+    public Brush DecisionInfoBarBorderBrush { get => _decisionInfoBarBorderBrush; private set => SetProperty(ref _decisionInfoBarBorderBrush, value); }
+
+    private bool _showDecisionInfoBar;
+    public bool ShowDecisionInfoBar { get => _showDecisionInfoBar; private set => SetProperty(ref _showDecisionInfoBar, value); }
+
+    private bool _showCandidateEmptyState;
+    public bool ShowCandidateEmptyState { get => _showCandidateEmptyState; private set => SetProperty(ref _showCandidateEmptyState, value); }
+
+    private bool _showCandidateCardList;
+    public bool ShowCandidateCardList { get => _showCandidateCardList; private set => SetProperty(ref _showCandidateCardList, value); }
+
+    /// <summary>占位：后续接入高相似风险逻辑时置 true。</summary>
+    public bool ShowHighRiskDuplicateState { get; private set; }
+
+    private string _specInputStateHint = "待输入";
+    public string SpecInputStateHint { get => _specInputStateHint; private set => SetProperty(ref _specInputStateHint, value); }
+
+    public string CandidateSimilarityPlaceholder => "相似度：—（预留）";
+
     public RelayCommand CreateCommand { get; }
     public RelayCommand RefreshCategoriesCommand { get; }
     public RelayCommand OpenAddCategoryCommand { get; }
     public RelayCommand<MaterialItemSpecHit> UseCandidateAsReplacementCommand { get; }
+    public RelayCommand<MaterialItemSpecHit> SelectCandidateCommand { get; }
     public RelayCommand ForceCreateWithConfirmCommand { get; }
 
     public CreateMaterialViewModel(
@@ -117,6 +183,17 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         Func<MaterialItemSpecHit, Task> navigateToReplacementFromCandidate,
         Func<Task> openAddCategoryDialog)
     {
+        BrushGray.Freeze();
+        BrushGreen.Freeze();
+        BrushOrange.Freeze();
+        BrushRed.Freeze();
+        BrushStateStripBgIdle.Freeze();
+        BrushStateStripBgOk.Freeze();
+        BrushStateStripBgWarn.Freeze();
+        BrushStateStripBgRisk.Freeze();
+        BrushInfoBarSurface.Freeze();
+        BrushInfoBarBorder.Freeze();
+
         _app = app;
         _debouncer = debouncer;
         _dialogService = dialogService;
@@ -133,6 +210,13 @@ public sealed class CreateMaterialViewModel : ViewModelBase
                     await _navigateToReplacementFromCandidate(hit);
             },
             hit => hit is not null);
+        SelectCandidateCommand = new RelayCommand<MaterialItemSpecHit>(
+            hit =>
+            {
+                if (hit is not null)
+                    SelectedCandidate = hit;
+            },
+            hit => hit is not null);
         ForceCreateWithConfirmCommand = new RelayCommand(
             () =>
             {
@@ -142,12 +226,24 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             },
             () => DecisionState == CreateDecisionState.HasCandidate);
 
+        UpdateSpecInputStateHint();
+        UpdateDecisionPresentation();
         _ = RefreshCategoriesAsync();
     }
 
     public void NotifySpecFieldFocused() => KeywordSource = MaterialSearchKeywordSource.Spec;
 
     public void NotifyDescriptionFieldFocused() => KeywordSource = MaterialSearchKeywordSource.Description;
+
+    private void UpdateSpecInputStateHint()
+    {
+        if (!string.IsNullOrEmpty(SpecFieldError))
+            SpecInputStateHint = "重复";
+        else if (string.IsNullOrWhiteSpace(Spec))
+            SpecInputStateHint = "待输入";
+        else
+            SpecInputStateHint = "正常";
+    }
 
     private static bool AreSpecAndDescriptionBothEmpty(string spec, string description) =>
         string.IsNullOrWhiteSpace(spec) && string.IsNullOrWhiteSpace(description);
@@ -168,7 +264,86 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         NotifyPropertyChanged(nameof(ShowDecisionBar));
         CreateCommand.RaiseCanExecuteChanged();
         ForceCreateWithConfirmCommand.RaiseCanExecuteChanged();
+        UpdateDecisionPresentation();
         return true;
+    }
+
+    private void UpdateDecisionPresentation()
+    {
+        var count = CandidateItems.Count;
+        ShowCandidateCardList = count > 0;
+        ShowCandidateEmptyState = !CandidateLoading && count == 0 && DecisionState == CreateDecisionState.Idle;
+        CandidateStateSubMessage = CandidateStatus;
+
+        if (ShowHighRiskDuplicateState && !CandidateLoading)
+        {
+            CandidateStateIcon = "🚨";
+            CandidateStateMessage = "高相似风险";
+            CandidateStateForeground = BrushRed;
+            CandidateStateStripBackground = BrushStateStripBgRisk;
+            ShowDecisionInfoBar = count > 0;
+            DecisionInfoBarBackground = new SolidColorBrush(Color.FromRgb(0xFE, 0xE2, 0xE2));
+            DecisionInfoBarBorderBrush = BrushRed;
+            return;
+        }
+
+        if (CandidateLoading)
+        {
+            CandidateStateIcon = "⏳";
+            CandidateStateMessage = "正在检索相似物料...";
+            CandidateStateForeground = BrushGray;
+            CandidateStateStripBackground = BrushStateStripBgIdle;
+            ShowDecisionInfoBar = false;
+            return;
+        }
+
+        switch (DecisionState)
+        {
+            case CreateDecisionState.Idle:
+                CandidateStateIcon = "🔍";
+                CandidateStateMessage = "待检索";
+                CandidateStateForeground = BrushGray;
+                CandidateStateStripBackground = BrushStateStripBgIdle;
+                ShowDecisionInfoBar = false;
+                break;
+            case CreateDecisionState.Searching:
+                CandidateStateIcon = "⏳";
+                CandidateStateMessage = "正在检索相似物料...";
+                CandidateStateForeground = BrushGray;
+                CandidateStateStripBackground = BrushStateStripBgIdle;
+                ShowDecisionInfoBar = false;
+                break;
+            case CreateDecisionState.NoCandidate:
+                CandidateStateIcon = "✔";
+                CandidateStateMessage = "未发现匹配物料";
+                CandidateStateForeground = BrushGreen;
+                CandidateStateStripBackground = BrushStateStripBgOk;
+                ShowDecisionInfoBar = false;
+                break;
+            case CreateDecisionState.HasCandidate:
+                CandidateStateIcon = "⚠";
+                CandidateStateMessage = "检测到相似物料";
+                CandidateStateForeground = BrushOrange;
+                CandidateStateStripBackground = BrushStateStripBgWarn;
+                ShowDecisionInfoBar = count > 0;
+                DecisionInfoBarBackground = BrushInfoBarSurface;
+                DecisionInfoBarBorderBrush = BrushInfoBarBorder;
+                break;
+            case CreateDecisionState.ForcedCreate:
+                CandidateStateIcon = "✔";
+                CandidateStateMessage = "可创建新主料";
+                CandidateStateForeground = BrushGreen;
+                CandidateStateStripBackground = BrushStateStripBgOk;
+                ShowDecisionInfoBar = false;
+                break;
+            default:
+                CandidateStateIcon = "🔍";
+                CandidateStateMessage = "";
+                CandidateStateForeground = BrushGray;
+                CandidateStateStripBackground = BrushStateStripBgIdle;
+                ShowDecisionInfoBar = false;
+                break;
+        }
     }
 
     private void ScheduleCandidateRefresh()
@@ -196,6 +371,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             CandidateStatus = "";
             TrySetIdleIfBothInputsEmpty();
             CreateCommand.RaiseCanExecuteChanged();
+            UpdateDecisionPresentation();
             return;
         }
 
@@ -207,6 +383,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             CandidateStatus = "请选择分类并输入关键字。";
             TrySetIdleIfBothInputsEmpty();
             CreateCommand.RaiseCanExecuteChanged();
+            UpdateDecisionPresentation();
             return;
         }
 
@@ -219,6 +396,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             CandidateStatus = "";
             TrySetIdleIfBothInputsEmpty();
             CreateCommand.RaiseCanExecuteChanged();
+            UpdateDecisionPresentation();
             return;
         }
 
@@ -239,6 +417,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             CandidateLoading = false;
             TrySetIdleIfBothInputsEmpty();
             CreateCommand.RaiseCanExecuteChanged();
+            UpdateDecisionPresentation();
             return;
         }
 
@@ -252,6 +431,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
                 : "";
             TrySetIdleIfBothInputsEmpty();
             CreateCommand.RaiseCanExecuteChanged();
+            UpdateDecisionPresentation();
             return;
         }
 
@@ -298,6 +478,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             CandidateLoading = false;
             CreateCommand.RaiseCanExecuteChanged();
             UseCandidateAsReplacementCommand.RaiseCanExecuteChanged();
+            UpdateDecisionPresentation();
         }
     }
 
@@ -322,6 +503,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
         var prev = SelectedCategory?.Code;
         SelectedCategory = Categories.FirstOrDefault(x => x.Code == prev) ?? Categories.FirstOrDefault();
+        UpdateDecisionPresentation();
     }
 
     private async Task CreateAsync()
@@ -360,5 +542,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         }
         else
             Result = $"失败：{res.Error.Code} - {res.Error.Message}";
+
+        UpdateSpecInputStateHint();
     }
 }

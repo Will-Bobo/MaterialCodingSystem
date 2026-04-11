@@ -5,109 +5,285 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Material Coding System" Height="720" Width="1020">
+    <Window.Resources>
+        <SolidColorBrush x:Key="Brush.App.Background" Color="#F3F3F3"/>
+        <SolidColorBrush x:Key="Brush.Field.Error" Color="#DC2626"/>
+        <SolidColorBrush x:Key="Brush.Text.Muted" Color="#6B7280"/>
+        <SolidColorBrush x:Key="Brush.Accent.Primary" Color="#2563EB"/>
+        <SolidColorBrush x:Key="Brush.Border.Subtle" Color="#E5E7EB"/>
+        <SolidColorBrush x:Key="Brush.Overlay.Loading" Color="#99FFFFFF"/>
+
+        <Style TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style x:Key="TitleText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="12"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="10" Opacity="0.15"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="CandidateCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="12"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="10" Opacity="0.1"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource Brush.Accent.Primary}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="12,6"/>
+        </Style>
+        <Style x:Key="GhostButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Muted}"/>
+        </Style>
+        <Style x:Key="CandidateListBox" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="False"/>
+        </Style>
+        <Style x:Key="CandidateListBoxItem" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="ItemBd" Background="Transparent" BorderThickness="2" CornerRadius="8" Padding="0" Margin="0,0,0,4">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBd" Property="BorderBrush" Value="{StaticResource Brush.Accent.Primary}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <Grid>
         <TabControl Margin="12" SelectedIndex="{Binding SelectedTabIndex}">
             <TabItem Header="新建主物料(A)">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <Grid Margin="12">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="200"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
+                <Grid Background="{StaticResource Brush.App.Background}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="340"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="分类编码"/>
-                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="8,4">
-                            <ComboBox Width="220"
-                                      ItemsSource="{Binding CreateMaterial.Categories}"
-                                      SelectedItem="{Binding CreateMaterial.SelectedCategory}"
-                                      DisplayMemberPath="Code"/>
-                            <Button Margin="8,0,0,0" Padding="12,4" Content="刷新" Command="{Binding CreateMaterial.RefreshCategoriesCommand}"/>
-                            <Button Margin="8,0,0,0" Padding="12,4" Content="新增分类…" Command="{Binding CreateMaterial.OpenAddCategoryCommand}"/>
-                        </StackPanel>
+                    <Border Grid.Column="0" Style="{StaticResource CardStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                                <StackPanel>
+                                    <TextBlock Text="新建主物料" Style="{StaticResource TitleText}" Margin="0,0,0,16"/>
 
-                        <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Top" Margin="0,8,0,0" Text="规格号(spec)"/>
-                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,4">
-                            <TextBlock Foreground="Gray" FontSize="11" Text="填写供应商型号（如 CL10A106KP8NNNC）"/>
-                            <TextBox GotFocus="SpecField_OnGotFocus"
-                                     Text="{Binding CreateMaterial.Spec, UpdateSourceTrigger=PropertyChanged}"/>
-                            <TextBlock Foreground="Red" TextWrapping="Wrap" Text="{Binding CreateMaterial.SpecFieldError}"/>
-                        </StackPanel>
+                                    <Border BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="分类" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                            <ComboBox Style="{StaticResource ModernComboBox}"
+                                                      ItemsSource="{Binding CreateMaterial.Categories}"
+                                                      SelectedItem="{Binding CreateMaterial.SelectedCategory}"
+                                                      DisplayMemberPath="Code"
+                                                      Margin="0,0,0,8"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Padding="12,4" Content="刷新" Command="{Binding CreateMaterial.RefreshCategoriesCommand}"/>
+                                                <Button Padding="12,4" Margin="8,0,0,0" Content="新增分类…" Command="{Binding CreateMaterial.OpenAddCategoryCommand}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
 
-                        <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Top" Margin="0,8,0,0" Text="规格描述(desc)"/>
-                        <StackPanel Grid.Row="2" Grid.Column="1" Margin="8,4">
-                            <TextBlock Foreground="Gray" FontSize="11" Text="填写完整规格（如 10uF 16V 0603 X5R）"/>
-                            <TextBox GotFocus="DescriptionField_OnGotFocus"
-                                     Text="{Binding CreateMaterial.Description, UpdateSourceTrigger=PropertyChanged}"/>
-                        </StackPanel>
+                                    <Border BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="规格号 (Spec)" FontWeight="SemiBold"/>
+                                            <TextBlock Foreground="{StaticResource Brush.Text.Muted}" FontSize="11" Margin="0,4,0,0" Text="填写供应商型号（如 CL10A106KP8NNNC）"/>
+                                            <TextBox Style="{StaticResource ModernTextBox}"
+                                                     GotFocus="SpecField_OnGotFocus"
+                                                     Margin="0,4,0,0"
+                                                     Text="{Binding CreateMaterial.Spec, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock Foreground="{StaticResource Brush.Field.Error}" FontSize="11" TextWrapping="Wrap" Text="{Binding CreateMaterial.SpecFieldError}"/>
+                                            <TextBlock Margin="0,6,0,0" FontSize="11" Foreground="{StaticResource Brush.Text.Muted}">
+                                                <Run Text="输入状态："/>
+                                                <Run Text="{Binding CreateMaterial.SpecInputStateHint, Mode=OneWay}"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
 
-                        <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="名称"/>
-                        <TextBox Grid.Row="3" Grid.Column="1" Margin="8,4" Text="{Binding CreateMaterial.Name, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Border BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="规格描述" FontWeight="SemiBold"/>
+                                            <TextBlock Foreground="{StaticResource Brush.Text.Muted}" FontSize="11" Margin="0,4,0,0" Text="填写完整规格（如 10uF 16V 0603 X5R）"/>
+                                            <TextBox Style="{StaticResource ModernTextBox}"
+                                                     GotFocus="DescriptionField_OnGotFocus"
+                                                     Margin="0,4,0,0"
+                                                     Text="{Binding CreateMaterial.Description, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+                                    </Border>
 
-                        <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="品牌"/>
-                        <TextBox Grid.Row="4" Grid.Column="1" Margin="8,4" Text="{Binding CreateMaterial.Brand, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Border BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="名称" FontWeight="SemiBold"/>
+                                            <TextBox Style="{StaticResource ModernTextBox}"
+                                                     Margin="0,4,0,0" Text="{Binding CreateMaterial.Name, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock Text="品牌" FontWeight="SemiBold" Margin="0,12,0,0"/>
+                                            <TextBox Style="{StaticResource ModernTextBox}"
+                                                     Margin="0,4,0,0" Text="{Binding CreateMaterial.Brand, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+                                    </Border>
 
-                        <TextBlock Grid.Row="5" Grid.Column="1" Margin="8,4" Foreground="Red" TextWrapping="Wrap" Text="{Binding CreateMaterial.GlobalError}"/>
-
-                        <Border Grid.Row="6" Grid.Column="1" Margin="8,4" Padding="8" Background="#FFFEF9E6" BorderBrush="#FFF5DEB3" BorderThickness="1"
-                                Visibility="{Binding CreateMaterial.ShowDecisionBar, Converter={StaticResource BoolToVis}}">
-                            <StackPanel>
-                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" Text="请选择："/>
-                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                    <Button Content="作为替代料" Padding="10,4" Margin="0,0,8,0"
-                                            Command="{Binding CreateMaterial.UseCandidateAsReplacementCommand}"
-                                            CommandParameter="{Binding CreateMaterial.SelectedCandidate}"/>
-                                    <Button Content="仍然新建主物料" Padding="10,4" Command="{Binding CreateMaterial.ForceCreateWithConfirmCommand}"/>
+                                    <TextBlock Foreground="{StaticResource Brush.Field.Error}" TextWrapping="Wrap" Text="{Binding CreateMaterial.GlobalError}"/>
                                 </StackPanel>
+                            </ScrollViewer>
+
+                            <StackPanel Grid.Row="1" Margin="0,16,0,0">
+                                <Button Content="创建主物料"
+                                        Style="{StaticResource PrimaryButton}"
+                                        HorizontalAlignment="Stretch"
+                                        Command="{Binding CreateMaterial.CreateCommand}"/>
+                                <TextBlock TextWrapping="Wrap" Text="{Binding CreateMaterial.Result}" Margin="0,12,0,0"/>
                             </StackPanel>
-                        </Border>
-
-                        <TextBlock Grid.Row="7" Grid.Column="1" Margin="8,4" FontWeight="SemiBold" Text="候选物料（实时 Top20）"/>
-                        <Grid Grid.Row="8" Grid.Column="1" Margin="8,4">
-                            <DataGrid ItemsSource="{Binding CreateMaterial.CandidateItems}" Height="180"
-                                      SelectedItem="{Binding CreateMaterial.SelectedCandidate, Mode=TwoWay}"
-                                      AutoGenerateColumns="False" IsReadOnly="True">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="编码" Binding="{Binding Code}" Width="160"/>
-                                    <DataGridTextColumn Header="规格号" Binding="{Binding Spec}" Width="200"/>
-                                    <DataGridTextColumn Header="规格描述" Binding="{Binding Description}" Width="*"/>
-                                    <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="120"/>
-                                    <DataGridTextColumn Header="品牌" Binding="{Binding Brand}" Width="80"/>
-                                    <DataGridTemplateColumn Header="操作" Width="140">
-                                        <DataGridTemplateColumn.CellTemplate>
-                                            <DataTemplate>
-                                                <Button Content="作为替代料"
-                                                        Padding="8,2"
-                                                        Command="{Binding DataContext.CreateMaterial.UseCandidateAsReplacementCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                                        CommandParameter="{Binding}"/>
-                                            </DataTemplate>
-                                        </DataGridTemplateColumn.CellTemplate>
-                                    </DataGridTemplateColumn>
-                                </DataGrid.Columns>
-                            </DataGrid>
                         </Grid>
+                    </Border>
 
-                        <TextBlock Grid.Row="9" Grid.Column="1" Margin="8,4" Foreground="DimGray" TextWrapping="Wrap"
-                                   Text="{Binding CreateMaterial.CandidateStatus}"/>
+                    <Border Grid.Column="1" Style="{StaticResource CardStyle}">
+                        <Grid MinHeight="380">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
 
-                        <StackPanel Grid.Row="10" Grid.ColumnSpan="2" Orientation="Vertical" Margin="0,12,0,0">
-                            <Button Width="140" HorizontalAlignment="Left" Content="创建主物料" Command="{Binding CreateMaterial.CreateCommand}"/>
-                            <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Text="{Binding CreateMaterial.Result}"/>
-                        </StackPanel>
-                    </Grid>
-                </ScrollViewer>
+                            <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                                <TextBlock Text="候选决策" Style="{StaticResource TitleText}"/>
+                            </StackPanel>
+
+                            <Border Grid.Row="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8"
+                                    Background="{Binding CreateMaterial.CandidateStateStripBackground}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding CreateMaterial.CandidateStateIcon}" FontSize="18" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding CreateMaterial.CandidateStateMessage}" FontWeight="SemiBold"
+                                                   Foreground="{Binding CreateMaterial.CandidateStateForeground}"/>
+                                        <TextBlock FontSize="11" Foreground="{StaticResource Brush.Text.Muted}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                                   Text="{Binding CreateMaterial.CandidateStateSubMessage}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding CreateMaterial.CandidateStateSubMessage}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Row="2" CornerRadius="6" Padding="12,10" Margin="0,0,0,8"
+                                    BorderThickness="1"
+                                    Background="{Binding CreateMaterial.DecisionInfoBarBackground}"
+                                    BorderBrush="{Binding CreateMaterial.DecisionInfoBarBorderBrush}"
+                                    Visibility="{Binding CreateMaterial.ShowDecisionInfoBar, Converter={StaticResource BoolToVis}}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="⚠" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center" Foreground="{StaticResource Brush.Accent.Primary}"/>
+                                    <TextBlock Grid.Column="1" Text="请选择处理方式" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                        <Button Content="作为替代料"
+                                                Style="{StaticResource PrimaryButton}"
+                                                Command="{Binding CreateMaterial.UseCandidateAsReplacementCommand}"
+                                                CommandParameter="{Binding CreateMaterial.SelectedCandidate}"/>
+                                        <Button Content="仍然新建"
+                                                Margin="8,0,0,0"
+                                                Padding="12,6"
+                                                Command="{Binding CreateMaterial.ForceCreateWithConfirmCommand}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <Grid Grid.Row="3" Margin="0,0,0,0">
+                                <ListBox Panel.ZIndex="0"
+                                         Style="{StaticResource CandidateListBox}"
+                                         ItemContainerStyle="{StaticResource CandidateListBoxItem}"
+                                         ItemsSource="{Binding CreateMaterial.CandidateItems}"
+                                         SelectedItem="{Binding CreateMaterial.SelectedCandidate, Mode=TwoWay}"
+                                         Visibility="{Binding CreateMaterial.ShowCandidateCardList, Converter={StaticResource BoolToVis}}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource CandidateCardStyle}" Margin="0">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Code}" FontWeight="Bold" FontSize="14"/>
+                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource Brush.Text.Muted}"
+                                                               Text="{Binding DataContext.CreateMaterial.CandidateSimilarityPlaceholder, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                    <TextBlock Margin="0,8,0,0"><Run Text="规格号: "/><Run Text="{Binding Spec, Mode=OneWay}"/></TextBlock>
+                                                    <TextBlock Margin="0,2,0,0" TextWrapping="Wrap"><Run Text="描述: "/><Run Text="{Binding Description, Mode=OneWay}"/></TextBlock>
+                                                    <TextBlock Margin="0,2,0,0"><Run Text="名称: "/><Run Text="{Binding Name, Mode=OneWay}"/></TextBlock>
+                                                    <TextBlock Margin="0,2,0,0"><Run Text="品牌: "/><Run Text="{Binding Brand, Mode=OneWay}"/></TextBlock>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                                        <Button Content="作为替代料"
+                                                                Style="{StaticResource PrimaryButton}"
+                                                                Padding="10,4"
+                                                                Command="{Binding DataContext.CreateMaterial.UseCandidateAsReplacementCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"/>
+                                                        <Button Content="查看详情（预留）"
+                                                                Style="{StaticResource GhostButton}"
+                                                                Margin="8,0,0,0"
+                                                                IsEnabled="False"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <Border Panel.ZIndex="1" Background="Transparent" Visibility="{Binding CreateMaterial.ShowCandidateEmptyState, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
+                                        <TextBlock Text="🔍" FontSize="36" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="输入规格号开始查重" FontWeight="SemiBold" FontSize="14" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                                        <TextBlock Text="支持规格号或描述模糊匹配" Foreground="{StaticResource Brush.Text.Muted}" HorizontalAlignment="Center" Margin="0,6,0,0" TextAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Panel.ZIndex="2" Background="{StaticResource Brush.Overlay.Loading}" Visibility="{Binding CreateMaterial.CandidateLoading, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <TextBlock Text="⏳" FontSize="28" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="正在搜索..." FontWeight="SemiBold" Margin="0,8,0,0" HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </Grid>
             </TabItem>
 
             <TabItem Header="新增替代料(B-Z)">
@@ -140,7 +316,8 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Width="260" Margin="0,0,8,0"
+                                <TextBox Style="{StaticResource ModernTextBox}"
+                                         Grid.Column="0" Width="260" Margin="0,0,8,0"
                                          Text="{Binding CreateReplacement.EmbeddedCodeKeyword, UpdateSourceTrigger=PropertyChanged}"/>
                                 <Button Grid.Column="2" Content="搜索" Padding="12,4" Command="{Binding CreateReplacement.EmbeddedCodeSearchCommand}"/>
                             </Grid>
@@ -169,10 +346,12 @@
 
                         <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="通过编码定位组"/>
                         <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="8,4">
-                            <TextBox Width="240" Text="{Binding CreateReplacement.ExistingItemCode, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox Style="{StaticResource ModernTextBox}"
+                                     Width="240" Text="{Binding CreateReplacement.ExistingItemCode, UpdateSourceTrigger=PropertyChanged}"/>
                             <Button Margin="8,0,0,0" Padding="12,4" Content="定位" Command="{Binding CreateReplacement.ResolveGroupCommand}"/>
                             <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Text="GroupId"/>
-                            <TextBox Width="120" Margin="8,0,0,0" Text="{Binding CreateReplacement.GroupId, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox Style="{StaticResource ModernTextBox}"
+                                     Width="120" Margin="8,0,0,0" Text="{Binding CreateReplacement.GroupId, UpdateSourceTrigger=PropertyChanged}"/>
                             <Button Margin="8,0,0,0" Padding="12,4" Content="加载组信息" Command="{Binding CreateReplacement.LoadGroupInfoCommand}"/>
                         </StackPanel>
 
@@ -192,18 +371,22 @@
 
                         <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center" Text="规格号(spec)"/>
                         <StackPanel Grid.Row="6" Grid.Column="1" Margin="8,4">
-                            <TextBox Text="{Binding CreateReplacement.Spec, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox Style="{StaticResource ModernTextBox}"
+                                     Text="{Binding CreateReplacement.Spec, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBlock Foreground="Red" Text="{Binding CreateReplacement.SpecFieldError}"/>
                         </StackPanel>
 
                         <TextBlock Grid.Row="7" Grid.Column="0" VerticalAlignment="Center" Text="规格描述(desc)"/>
-                        <TextBox Grid.Row="7" Grid.Column="1" Margin="8,4" Text="{Binding CreateReplacement.Description, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBox Style="{StaticResource ModernTextBox}"
+                                 Grid.Row="7" Grid.Column="1" Margin="8,4" Text="{Binding CreateReplacement.Description, UpdateSourceTrigger=PropertyChanged}"/>
 
                         <TextBlock Grid.Row="8" Grid.Column="0" VerticalAlignment="Center" Text="名称"/>
-                        <TextBox Grid.Row="8" Grid.Column="1" Margin="8,4" Text="{Binding CreateReplacement.Name, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBox Style="{StaticResource ModernTextBox}"
+                                 Grid.Row="8" Grid.Column="1" Margin="8,4" Text="{Binding CreateReplacement.Name, UpdateSourceTrigger=PropertyChanged}"/>
 
                         <TextBlock Grid.Row="9" Grid.Column="0" VerticalAlignment="Center" Text="品牌"/>
-                        <TextBox Grid.Row="9" Grid.Column="1" Margin="8,4" Text="{Binding CreateReplacement.Brand, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBox Style="{StaticResource ModernTextBox}"
+                                 Grid.Row="9" Grid.Column="1" Margin="8,4" Text="{Binding CreateReplacement.Brand, UpdateSourceTrigger=PropertyChanged}"/>
 
                         <StackPanel Grid.Row="10" Grid.ColumnSpan="2" Orientation="Vertical" Margin="0,12,0,0">
                             <TextBlock TextWrapping="Wrap" Foreground="DarkSlateGray" Margin="0,0,0,8"
@@ -238,7 +421,8 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="关键字"/>
-                            <TextBox Grid.Column="1" Margin="8,0" Text="{Binding Search.CodeKeyword, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox Style="{StaticResource ModernTextBox}"
+                                     Grid.Column="1" Margin="8,0" Text="{Binding Search.CodeKeyword, UpdateSourceTrigger=PropertyChanged}"/>
                             <Button Grid.Column="2" Content="搜索" Padding="12,4" Command="{Binding Search.SearchByCodeCommand}"/>
                         </Grid>
                     </GroupBox>
@@ -272,14 +456,16 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="分类编码"/>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0">
-                                <ComboBox Width="200"
+                                <ComboBox Style="{StaticResource ModernComboBox}"
+                                          Width="200"
                                           ItemsSource="{Binding Search.Categories}"
                                           SelectedItem="{Binding Search.SelectedCategory}"
                                           DisplayMemberPath="Code"/>
                                 <Button Margin="8,0,0,0" Padding="12,4" Content="刷新" Command="{Binding Search.RefreshCategoriesCommand}"/>
                             </StackPanel>
                             <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="关键字"/>
-                            <TextBox Grid.Column="3" Margin="8,0" Text="{Binding Search.SpecKeyword, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox Style="{StaticResource ModernTextBox}"
+                                     Grid.Column="3" Margin="8,0" Text="{Binding Search.SpecKeyword, UpdateSourceTrigger=PropertyChanged}"/>
                             <Button Grid.Column="4" Content="搜索" Padding="12,4" Command="{Binding Search.SearchBySpecCommand}"/>
                         </Grid>
                     </GroupBox>
@@ -313,7 +499,8 @@
 
                     <StackPanel Grid.Row="7" Orientation="Horizontal" Margin="0,12,0,0" VerticalAlignment="Center">
                         <TextBlock VerticalAlignment="Center" Text="废弃编码"/>
-                        <TextBox Width="220" Margin="8,0" Text="{Binding Deprecate.Code, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBox Style="{StaticResource ModernTextBox}"
+                                 Width="220" Margin="8,0" Text="{Binding Deprecate.Code, UpdateSourceTrigger=PropertyChanged}"/>
                         <Button Content="废弃" Padding="12,4" Command="{Binding Deprecate.DeprecateCommand}"/>
                         <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Text="{Binding Deprecate.Result}"/>
                     </StackPanel>
