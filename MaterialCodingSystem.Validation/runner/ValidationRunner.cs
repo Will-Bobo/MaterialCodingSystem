@@ -43,7 +43,8 @@ public sealed class ValidationRunner
         }
         catch (Exception ex)
         {
-            return ExecutionResult.Fail(ex.Message);
+            var reason = $"{ex.Message} | when.action={plan.ActionName}";
+            return ExecutionResult.Fail(reason, ValidationFailureHints.SuggestCodeRef(ex));
         }
     }
 
@@ -67,8 +68,27 @@ public sealed class ValidationRunner
 
 public sealed record ExecutionOutcome(DbFixture Db, object Result);
 
-public sealed record ExecutionResult(bool Passed, string? Reason)
+public sealed record ExecutionResult(bool Passed, string? Reason, string? CodeReference)
 {
-    public static ExecutionResult Pass() => new(true, null);
-    public static ExecutionResult Fail(string reason) => new(false, reason);
+    public static ExecutionResult Pass() => new(true, null, null);
+
+    public static ExecutionResult Fail(string reason, string? codeReference = null) =>
+        new(false, reason, codeReference);
+}
+
+internal static class ValidationFailureHints
+{
+    public static string SuggestCodeRef(Exception ex)
+    {
+        var m = ex.Message ?? "";
+        if (m.Contains("Result equals assertion failed", StringComparison.Ordinal))
+            return "MaterialCodingSystem.Validation/core/AssertionEngine.cs — AssertResultEquals";
+        if (m.Contains("DB exists assertion failed", StringComparison.Ordinal))
+            return "MaterialCodingSystem.Validation/core/AssertionEngine.cs — ExpectDbExists";
+        if (m.Contains("Expected error", StringComparison.Ordinal) || m.Contains("Unexpected error", StringComparison.Ordinal))
+            return "MaterialCodingSystem.Validation/core/AssertionEngine.cs — ExpectError";
+        if (m.Contains("Replay mismatch", StringComparison.Ordinal))
+            return "MaterialCodingSystem.Validation/runner/ValidationRunner.cs — replay";
+        return "MaterialCodingSystem.Validation/actions/PrdActions.cs（或 BuiltInActions）— 对照 YAML when.action";
+    }
 }

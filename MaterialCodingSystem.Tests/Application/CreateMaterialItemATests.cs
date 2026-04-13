@@ -8,6 +8,32 @@ namespace MaterialCodingSystem.Tests.Application;
 public class CreateMaterialItemATests
 {
     [Fact]
+    public async Task CreateA_WhenInsertItemCategorySpecConstraint_Returns_SPEC_DUPLICATE_WithoutRetry()
+    {
+        var uow = new CountingUnitOfWork();
+        var repo = new FakeMaterialRepository
+        {
+            CategoryExists = true,
+            SpecExists = false,
+            MaxSerialNo = 0,
+            FailItemInsertWithCategorySpecTimes = 1
+        };
+        var app = new MaterialApplicationService(uow, repo);
+
+        var res = await app.CreateMaterialItemA(new CreateMaterialItemARequest(
+            CategoryCode: "ZDA",
+            Spec: "S1",
+            Name: "n",
+            Description: "d",
+            Brand: "b"
+        ));
+
+        Assert.False(res.IsSuccess);
+        Assert.Equal(ErrorCodes.SPEC_DUPLICATE, res.Error!.Code);
+        Assert.Equal(1, uow.Executions);
+    }
+
+    [Fact]
     public async Task CreateA_WhenSpecEmpty_ReturnsValidationError()
     {
         var app = new MaterialApplicationService(
@@ -25,6 +51,48 @@ public class CreateMaterialItemATests
 
         Assert.False(res.IsSuccess);
         Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error!.Code);
+    }
+
+    [Fact]
+    public async Task CreateA_WhenNameBlank_ReturnsValidationError()
+    {
+        var app = new MaterialApplicationService(
+            uow: new NoopUnitOfWork(),
+            repo: new FakeMaterialRepository { CategoryExists = true, SpecExists = false }
+        );
+
+        var res = await app.CreateMaterialItemA(new CreateMaterialItemARequest(
+            CategoryCode: "ZDA",
+            Spec: "S1",
+            Name: "  ",
+            Description: "d",
+            Brand: null
+        ));
+
+        Assert.False(res.IsSuccess);
+        Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error!.Code);
+        Assert.Equal("name is required.", res.Error.Message);
+    }
+
+    [Fact]
+    public async Task CreateA_WhenDescriptionBlank_ReturnsValidationError()
+    {
+        var app = new MaterialApplicationService(
+            uow: new NoopUnitOfWork(),
+            repo: new FakeMaterialRepository { CategoryExists = true, SpecExists = false }
+        );
+
+        var res = await app.CreateMaterialItemA(new CreateMaterialItemARequest(
+            CategoryCode: "ZDA",
+            Spec: "S1",
+            Name: "n",
+            Description: "",
+            Brand: null
+        ));
+
+        Assert.False(res.IsSuccess);
+        Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error!.Code);
+        Assert.Equal("description is required.", res.Error.Message);
     }
 
     [Fact]

@@ -126,9 +126,45 @@ public sealed class MaterialApplicationService
             ));
         }, ct);
 
+    /// <summary>
+    /// 下一组流水号建议值 = max(serial_no)+1（无组时为 1）。仅查询与 +1，不插入组。
+    /// 供 PRD Validation 等经 Application 入口使用。
+    /// </summary>
+    public Task<Result<int>> AllocateNextGroupSerial(string categoryCodeRaw, CancellationToken ct = default)
+        => _uow.ExecuteAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(categoryCodeRaw))
+            {
+                return Result<int>.Fail(ErrorCodes.VALIDATION_ERROR, "category_code is required.");
+            }
+
+            CategoryCode categoryCode;
+            try
+            {
+                categoryCode = new CategoryCode(categoryCodeRaw);
+            }
+            catch (DomainException ex) when (ex.Code == "VALIDATION_ERROR")
+            {
+                return Result<int>.Fail(ErrorCodes.VALIDATION_ERROR, ex.Message);
+            }
+
+            var max = await _repo.GetMaxSerialNoAsync(categoryCode, ct);
+            return Result<int>.Ok(max + 1);
+        }, ct);
+
     public Task<Result<CreateMaterialItemAResponse>> CreateMaterialItemA(CreateMaterialItemARequest req, CancellationToken ct = default)
         => ExecuteWithRetry(async () =>
         {
+            if (string.IsNullOrWhiteSpace(req.Name))
+            {
+                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "name is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(req.Description))
+            {
+                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "description is required.");
+            }
+
             CategoryCode categoryCode;
             Spec spec;
 
@@ -167,6 +203,10 @@ public sealed class MaterialApplicationService
                 // 触发 serial_no 并发冲突，交由外层事务级重试
                 throw;
             }
+            catch (DbConstraintViolationException)
+            {
+                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.INTERNAL_ERROR, "unexpected constraint on insert group.");
+            }
 
             var group = MaterialGroup.CreateNew(
                 categoryCode: categoryCode,
@@ -178,7 +218,26 @@ public sealed class MaterialApplicationService
             );
 
             var itemA = group.Items.Single(i => i.Suffix.Value == 'A');
-            await _repo.InsertItemAsync(groupId, itemA, ct);
+            try
+            {
+                await _repo.InsertItemAsync(groupId, itemA, ct);
+            }
+            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CATEGORY_SPEC)
+            {
+                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
+            }
+            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX)
+            {
+                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.INTERNAL_ERROR, "unexpected suffix conflict on create A.");
+            }
+            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CODE)
+            {
+                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.CODE_CONFLICT_RETRY, "code conflict.");
+            }
+            catch (DbConstraintViolationException)
+            {
+                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.INTERNAL_ERROR, "constraint violation on insert item.");
+            }
 
             return Result<CreateMaterialItemAResponse>.Ok(new CreateMaterialItemAResponse(
                 GroupId: groupId,
@@ -194,6 +253,16 @@ public sealed class MaterialApplicationService
     public Task<Result<CreateReplacementResponse>> CreateReplacement(CreateReplacementRequest req, CancellationToken ct = default)
         => ExecuteWithRetry(async () =>
         {
+            if (string.IsNullOrWhiteSpace(req.Name))
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "name is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(req.Description))
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "description is required.");
+            }
+
             Spec spec;
             try
             {
@@ -257,6 +326,18 @@ public sealed class MaterialApplicationService
             catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX)
             {
                 throw;
+            }
+            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CATEGORY_SPEC)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
+            }
+            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CODE)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.CODE_CONFLICT_RETRY, "code conflict.");
+            }
+            catch (DbConstraintViolationException)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.INTERNAL_ERROR, "constraint violation on insert item.");
             }
 
             return Result<CreateReplacementResponse>.Ok(new CreateReplacementResponse(

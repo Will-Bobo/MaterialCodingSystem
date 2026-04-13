@@ -39,19 +39,22 @@ public static class PrdActions
         var res = app.CreateMaterialItemA(new CreateMaterialItemARequest(
             CategoryCode: ctx.Input["category_code"]?.ToString() ?? "",
             Spec: ctx.Input["spec"]?.ToString() ?? "",
-            Name: ctx.Input["name"]?.ToString() ?? "",
-            Description: ctx.Input["description"]?.ToString() ?? "",
+            Name: MaterialInputTextOrPlaceholder(ctx, "name", "n"),
+            Description: MaterialInputTextOrPlaceholder(ctx, "description", "d"),
             Brand: ctx.Input["brand"]?.ToString()
         )).GetAwaiter().GetResult();
 
         if (!res.IsSuccess)
         {
-            // YAML 口径：分类相关用例期望更细粒度错误码
+            // YAML 口径：仅「分类缺失 / 分类不存在」映射为细粒度码；其余 VALIDATION_ERROR 原样透出（如 name/description 必填）
             if (res.Error!.Code == ErrorCodes.VALIDATION_ERROR)
             {
                 var category = ctx.Input["category_code"]?.ToString() ?? "";
-                if (string.IsNullOrEmpty(category)) throw new ValidationException("CATEGORY_REQUIRED");
-                throw new ValidationException("CATEGORY_NOT_FOUND");
+                if (string.IsNullOrEmpty(category))
+                    throw new ValidationException("CATEGORY_REQUIRED");
+                if (string.Equals(res.Error.Message, "category_code not found.", StringComparison.Ordinal))
+                    throw new ValidationException("CATEGORY_NOT_FOUND");
+                throw new ValidationException(ErrorCodes.VALIDATION_ERROR, res.Error.Message);
             }
 
             throw new ValidationException(res.Error!.Code);
@@ -65,48 +68,22 @@ public static class PrdActions
         if (ctx.Db is not SqliteDbFixture db)
             throw new ValidationException("DB_NOT_AVAILABLE");
 
-        if (ctx.Input.TryGetValue("deleted_suffix", out var _))
-            throw new ValidationException("SUFFIX_NO_REUSE");
-
         var app = new MaterialApplicationService(new SqliteUnitOfWork(db.Connection), new SqliteMaterialRepository(db.Connection));
 
         var groupId = Convert.ToInt32(ctx.Input["group_id"]);
 
-        // YAML: overflow case sometimes seeds only Z; treat it as overflow per spec expectation
-        var suffixes = db.Connection.Query<string>("SELECT suffix FROM material_item WHERE group_id=@groupId;", new { groupId })
-            .Select(s => s.FirstOrDefault())
-            .Where(c => c != '\0')
-            .ToHashSet();
-        if (suffixes.Contains('Z'))
-            throw new ValidationException("SUFFIX_OVERFLOW");
-
         var specRaw = ctx.Input.TryGetValue("spec", out var sp) ? sp?.ToString() : null;
-        var isSpecMissing = string.IsNullOrWhiteSpace(specRaw);
 
         var res = app.CreateReplacement(new CreateReplacementRequest(
             GroupId: groupId,
             Spec: specRaw ?? "__DUMMY__",
-            Name: ctx.Input["name"]?.ToString() ?? "",
-            Description: ctx.Input["description"]?.ToString() ?? "",
+            Name: MaterialInputTextOrPlaceholder(ctx, "name", "n"),
+            Description: MaterialInputTextOrPlaceholder(ctx, "description", "d"),
             Brand: ctx.Input["brand"]?.ToString()
         )).GetAwaiter().GetResult();
 
         if (!res.IsSuccess)
-        {
-            var code = res.Error!.Code;
-            // YAML 中存在 SUFFIX_* 的更细粒度错误码；以输入字段（若存在）作为区分线索
-            if (code == "SUFFIX_SEQUENCE_BROKEN")
-            {
-                if (ctx.Input.TryGetValue("deleted_suffix", out var _))
-                    throw new ValidationException("SUFFIX_NO_REUSE");
-                if (isSpecMissing)
-                    throw new ValidationException("SUFFIX_NO_GAP_FILL");
-                // 默认映射为“缺口禁止”（覆盖 core SUFFIX_GAP_FORBIDDEN_001）
-                throw new ValidationException("SUFFIX_GAP_FORBIDDEN");
-            }
-
-            throw new ValidationException(code);
-        }
+            throw new ValidationException(res.Error!.Code, res.Error.Message);
 
         return new Dictionary<string, object?> { ["code"] = res.Data!.Code };
     }
@@ -116,16 +93,19 @@ public static class PrdActions
         var cc = ctx.Input["category_code"]?.ToString() ?? "";
         var serial = Convert.ToInt32(ctx.Input["serial_no"]);
         var suffix = (ctx.Input["suffix"]?.ToString() ?? "A")[0];
-        var code = MaterialCodingSystem.Domain.Services.CodeGenerator.GenerateItemCode(cc, serial, suffix);
-        return new Dictionary<string, object?> { ["code"] = code };
+        var gen = MaterialCodeQueriesV1.GenerateItemCode(cc, serial, suffix);
+        if (!gen.IsSuccess)
+            throw new ValidationException(gen.Error!.Code, gen.Error.Message);
+        return new Dictionary<string, object?> { ["code"] = gen.Data! };
     }
 
     public static object FormatSerial(Context ctx)
     {
         var serial = Convert.ToInt32(ctx.Input["serial_no"]);
-        if (serial < 0) throw new ValidationException("VALIDATION_ERROR");
-        // spec expects 6 digits in one case; keep as spec requires
-        return new Dictionary<string, object?> { ["formatted"] = serial.ToString("D6") };
+        var fmt = MaterialFormatQueriesV1.FormatSerialWidth6(serial);
+        if (!fmt.IsSuccess)
+            throw new ValidationException(fmt.Error!.Code, fmt.Error.Message);
+        return new Dictionary<string, object?> { ["formatted"] = fmt.Data! };
     }
 
     public static object UpdateStatus(Context ctx)
@@ -159,12 +139,12 @@ public static class PrdActions
             throw new ValidationException("DB_NOT_AVAILABLE");
 
         var categoryCode = ctx.Input["category_code"]?.ToString() ?? "";
-        var max = db.Connection.ExecuteScalar<long?>(
-            "SELECT MAX(serial_no) FROM material_group WHERE category_code=@categoryCode;",
-            new { categoryCode }
-        ) ?? 0;
+        var app = new MaterialApplicationService(new SqliteUnitOfWork(db.Connection), new SqliteMaterialRepository(db.Connection));
+        var res = app.AllocateNextGroupSerial(categoryCode).GetAwaiter().GetResult();
+        if (!res.IsSuccess)
+            throw new ValidationException(res.Error!.Code, res.Error.Message);
 
-        return new Dictionary<string, object?> { ["serial_no"] = (int)(max + 1) };
+        return new Dictionary<string, object?> { ["serial_no"] = res.Data! };
     }
 
     public static object CreateMaterialABatch(Context ctx)
@@ -266,6 +246,17 @@ public static class PrdActions
         });
 
         return new Dictionary<string, object?> { ["success_count"] = successes, ["duplicate_rejected"] = duplicates };
+    }
+
+    /// <summary>
+    /// PRD_V1.yaml 可省略 name/description；runner 注入占位以满足 Application 入参非空校验（非产品 UI 行为）。
+    /// </summary>
+    private static string MaterialInputTextOrPlaceholder(Context ctx, string key, string placeholder)
+    {
+        if (!ctx.Input.TryGetValue(key, out var v) || v is null)
+            return placeholder;
+        var s = v.ToString();
+        return string.IsNullOrWhiteSpace(s) ? placeholder : s;
     }
 }
 

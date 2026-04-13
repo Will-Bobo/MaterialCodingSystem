@@ -7,6 +7,76 @@ namespace MaterialCodingSystem.Tests.Application;
 public class CreateReplacementTests
 {
     [Fact]
+    public async Task CreateReplacement_WhenInsertItemCategorySpecConstraint_Returns_SPEC_DUPLICATE_WithoutRetry()
+    {
+        var uow = new CountingUnitOfWork();
+        var repo = new FakeMaterialRepository
+        {
+            GroupExists = true,
+            ExistingSuffixes = new[] { 'A' },
+            GroupCategoryCode = "ZDA",
+            GroupSerialNo = 1,
+            SpecExists = false,
+            FailItemInsertWithCategorySpecTimes = 1
+        };
+        var app = new MaterialApplicationService(uow, repo);
+
+        var res = await app.CreateReplacement(new CreateReplacementRequest(
+            GroupId: 1,
+            Spec: "NEW",
+            Name: "n2",
+            Description: "d2",
+            Brand: "b2"
+        ));
+
+        Assert.False(res.IsSuccess);
+        Assert.Equal(ErrorCodes.SPEC_DUPLICATE, res.Error!.Code);
+        Assert.Equal(1, uow.Executions);
+    }
+
+    [Fact]
+    public async Task CreateReplacement_WhenNameBlank_ReturnsValidationError()
+    {
+        var app = new MaterialApplicationService(
+            uow: new NoopUnitOfWork(),
+            repo: new FakeMaterialRepository { GroupExists = true, ExistingSuffixes = new[] { 'A' } }
+        );
+
+        var res = await app.CreateReplacement(new CreateReplacementRequest(
+            GroupId: 1,
+            Spec: "NEW",
+            Name: "\t",
+            Description: "d2",
+            Brand: null
+        ));
+
+        Assert.False(res.IsSuccess);
+        Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error!.Code);
+        Assert.Equal("name is required.", res.Error.Message);
+    }
+
+    [Fact]
+    public async Task CreateReplacement_WhenDescriptionBlank_ReturnsValidationError()
+    {
+        var app = new MaterialApplicationService(
+            uow: new NoopUnitOfWork(),
+            repo: new FakeMaterialRepository { GroupExists = true, ExistingSuffixes = new[] { 'A' } }
+        );
+
+        var res = await app.CreateReplacement(new CreateReplacementRequest(
+            GroupId: 1,
+            Spec: "NEW",
+            Name: "n2",
+            Description: "   ",
+            Brand: null
+        ));
+
+        Assert.False(res.IsSuccess);
+        Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error!.Code);
+        Assert.Equal("description is required.", res.Error.Message);
+    }
+
+    [Fact]
     public async Task CreateReplacement_WhenSpecDuplicate_ReturnsSpecDuplicate()
     {
         var repo = new FakeMaterialRepository

@@ -43,6 +43,7 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
     public int DeprecateCalled { get; private set; }
 
     public int FailGroupInsertWithSerialConflictTimes { get; set; }
+    public int FailItemInsertWithCategorySpecTimes { get; set; }
     public int FailItemInsertWithSuffixConflictTimes { get; set; }
 
     public Task<bool> CategoryExistsAsync(CategoryCode categoryCode, CancellationToken ct = default)
@@ -94,6 +95,14 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
     public Task InsertItemAsync(int groupId, MaterialItem item, CancellationToken ct = default)
     {
         InsertItemCalled++;
+
+        if (FailItemInsertWithCategorySpecTimes > 0)
+        {
+            FailItemInsertWithCategorySpecTimes--;
+            throw new DbConstraintViolationException(
+                IMaterialRepository.CONSTRAINT_ITEM_CATEGORY_SPEC,
+                "UNIQUE constraint failed: material_item.category_code, material_item.spec");
+        }
 
         if (FailItemInsertWithSuffixConflictTimes > 0)
         {

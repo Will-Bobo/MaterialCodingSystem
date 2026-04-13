@@ -82,9 +82,10 @@ public class Phase2InMemorySingleConnectionIntegrationTests
 
         Assert.Equal(1, bag.Count(x => x.Ok));
         Assert.All(bag.Where(x => !x.Ok), f =>
-            Assert.True(
-                f.ErrCode == ErrorCodes.SPEC_DUPLICATE || f.Ex is not null,
-                $"Unexpected failure: Err={f.ErrCode}, Ex={f.Ex}"));
+        {
+            Assert.Null(f.Ex);
+            Assert.Equal(ErrorCodes.SPEC_DUPLICATE, f.ErrCode);
+        });
     }
 
     [Fact]

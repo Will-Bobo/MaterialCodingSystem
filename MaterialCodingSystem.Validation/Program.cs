@@ -39,19 +39,42 @@ class Program
 
         var fail = 0;
         var pass = 0;
+        var failureRows = new List<(string CaseId, string Reason, string? CodeRef)>();
         foreach (var (caseId, plan) in cases)
         {
             var r = runner.Run(plan);
             if (r.Passed) pass++;
-            else fail++;
+            else
+            {
+                fail++;
+                failureRows.Add((caseId, r.Reason ?? "", r.CodeReference));
+            }
 
             Console.WriteLine($"Case: {caseId}");
             Console.WriteLine($"Result: {(r.Passed ? "PASS" : "FAIL")}");
-            if (!r.Passed) Console.WriteLine($"Reason: {r.Reason}");
+            if (!r.Passed)
+            {
+                Console.WriteLine($"Reason: {r.Reason}");
+                if (!string.IsNullOrWhiteSpace(r.CodeReference))
+                    Console.WriteLine($"CodeRef: {r.CodeReference}");
+            }
+
             Console.WriteLine();
         }
 
         Console.WriteLine($"Summary: PASS={pass}, FAIL={fail}, Total={cases.Count}");
+        if (failureRows.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("=== FAILURE REPORT ===");
+            foreach (var (id, reason, cref) in failureRows)
+            {
+                Console.WriteLine($"- case_id: {id}");
+                Console.WriteLine($"  reason: {reason}");
+                Console.WriteLine($"  code_location_hint: {cref ?? "(none)"}");
+            }
+        }
+
         Environment.Exit(fail > 0 ? 1 : 0);
     }
 }

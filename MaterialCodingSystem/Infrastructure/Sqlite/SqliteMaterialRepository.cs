@@ -30,6 +30,53 @@ public sealed class SqliteMaterialRepository : IMaterialRepository
         }
     }
 
+    /// <summary>
+    /// 将 SQLite UNIQUE 违反（错误码 19）按消息中的表名+列组合映射为仓储约束标识；顺序与评审一致。
+    /// </summary>
+    internal static string MapSqliteUniqueConstraintViolation(string? message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return IMaterialRepository.CONSTRAINT_UNKNOWN;
+
+        var m = message;
+
+        bool HasCi(string sub) => m.IndexOf(sub, StringComparison.OrdinalIgnoreCase) >= 0;
+
+        // 1) material_item: category_code + spec（避免把 spec_normalized 列误判为 spec）
+        if (HasCi("material_item.category_code") && HasItemSpecColumn(m))
+            return IMaterialRepository.CONSTRAINT_ITEM_CATEGORY_SPEC;
+
+        // 2) material_item: group_id + suffix
+        if (HasCi("material_item.group_id") && HasCi("material_item.suffix"))
+            return IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX;
+
+        // 3) material_item: code
+        if (HasCi("material_item.code"))
+            return IMaterialRepository.CONSTRAINT_ITEM_CODE;
+
+        // 4) material_group: category_id + serial_no
+        if (HasCi("material_group.category_id") && HasCi("material_group.serial_no"))
+            return IMaterialRepository.CONSTRAINT_GROUP_CATEGORY_SERIAL;
+
+        return IMaterialRepository.CONSTRAINT_UNKNOWN;
+    }
+
+    /// <summary>消息中出现 material_item 的 spec 列（非 spec_normalized）。</summary>
+    private static bool HasItemSpecColumn(string m)
+    {
+        const string needle = "material_item.spec";
+        var idx = 0;
+        while (true)
+        {
+            idx = m.IndexOf(needle, idx, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) return false;
+            var after = idx + needle.Length;
+            if (after >= m.Length || m[after] != '_')
+                return true;
+            idx = after;
+        }
+    }
+
     public async Task<bool> CategoryExistsAsync(CategoryCode categoryCode, CancellationToken ct = default)
     {
         var sql = "SELECT 1 FROM category WHERE code = @code LIMIT 1;";
@@ -96,7 +143,8 @@ SELECT last_insert_rowid();";
         }
         catch (SqliteException ex) when (ex.SqliteErrorCode == 19) // constraint violation
         {
-            throw new DbConstraintViolationException(IMaterialRepository.CONSTRAINT_GROUP_CATEGORY_SERIAL, ex.Message);
+            var mapped = MapSqliteUniqueConstraintViolation(ex.Message);
+            throw new DbConstraintViolationException(mapped, ex.Message);
         }
     }
 
@@ -145,8 +193,8 @@ WHERE mg.id = @groupId;
         }
         catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
         {
-            // 这里只区分 suffix 冲突重试；spec 冲突由 Application 先查 + DB 强制兜底
-            throw new DbConstraintViolationException(IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX, ex.Message);
+            var mapped = MapSqliteUniqueConstraintViolation(ex.Message);
+            throw new DbConstraintViolationException(mapped, ex.Message);
         }
     }
 

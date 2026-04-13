@@ -1140,19 +1140,40 @@ LIMIT 20;
 
 ### 15.5 错误码定义
 
-必须包含：
+**口径说明（必须）**：错误码分为两类，实现与文档需区分使用场景：
+
+* **业务错误码**：与物料创建（A）、替代料（B-Z）、`spec` 唯一性、`suffix` 连续性/上限、编码并发冲突重试等 **PRD V1 核心物料业务**直接相关；UI 应优先按业务码映射专项提示（见下表「UI建议」列）。
+* **工程错误码**：见 **§15.5.2**，用于入参校验、资源不存在、分类重复、未预期内部失败等 **API/工程边界**；**不替代**业务错误码的语义，亦不要求与物料业务表同一套 UI 文案。
+
+必须包含（**业务错误码**）：
 
 * `SPEC_DUPLICATE`：规格号重复（同分类下 `spec` 冲突，触发 `UNIQUE(category_code, spec)`）
 * `SUFFIX_OVERFLOW`：超过 Z（26个）禁止创建
+* `SUFFIX_SEQUENCE_BROKEN`：**suffix 不连续（存在缺口）**；同一 `group_id` 下不满足 PRD 连续性判定时，**禁止创建替代料**（见 **4.3 / 10.2 / 15.1.2**）
 * `CODE_CONFLICT_RETRY`：编码/唯一约束冲突重试失败（超过3次）
 
-错误码完整列表（最终版，V1.2 收敛后）：
+业务错误码完整列表（最终版，V1.2 收敛后）：
 
 | 错误码 | 触发场景 | 是否阻断创建 | UI建议 |
 |---|---|---:|---|
 | SPEC_DUPLICATE | 同分类 `spec` 完全重复（触发 `UNIQUE(category_code, spec)`） | 是 | spec（规格号）输入框红字提示“规格号重复” |
 | SUFFIX_OVERFLOW | 替代料 suffix 超过 Z | 是 | 弹窗/全局提示“替代料已达上限” |
+| SUFFIX_SEQUENCE_BROKEN | 同组 suffix 不连续（存在跳号/缺口），禁止新增替代料 | 是（仅替代料创建） | 弹窗/全局提示“suffix 不连续，禁止创建替代料”（文案可产品化） |
 | CODE_CONFLICT_RETRY | 并发/冲突导致重试超过 3 次 | 是 | 弹窗/全局提示“系统繁忙，请重试” |
+
+**suffix 连续性错误码收敛（必须）**：凡属于「同组 suffix 不连续、不允许补洞、删除中间 suffix 后形成缺口」等 **同一 PRD 连续性判定** 的情形，Application **仅** 返回 `SUFFIX_SEQUENCE_BROKEN`（与 Domain `SuffixAllocator` 一致）。**不得**再使用或对外承诺下列曾用于校验 YAML/说明的别名：`SUFFIX_GAP_FORBIDDEN`、`SUFFIX_NO_GAP_FILL`、`SUFFIX_NO_REUSE`（上述语义一律并入 `SUFFIX_SEQUENCE_BROKEN`）。黑盒 spec（如 `PRD_V1.yaml`）应 **直接断言 Application 返回码**，**禁止**在 Validation 动作层对 suffix 相关错误做二次映射。与「已满 26 个后缀」相关的上限场景仍单独使用 **`SUFFIX_OVERFLOW`**。
+
+#### 15.5.2 工程错误码附录（非核心业务）
+
+以下码用于 **参数校验、资源定位、分类维护、内部失败** 等，**不属于**上表「业务错误码」的创建阻断语义；实现层可统一返回，由 UI 按场景映射通用提示。
+
+| 错误码 | 典型触发场景 | 说明 |
+|---|---|---|
+| VALIDATION_ERROR | 必填项缺失/格式不合法、分类编码不存在等 | 可字段级或全局提示，具体由调用场景决定 |
+| NOT_FOUND | 目标资源不存在（如 group/item 查询为空） | 通用“未找到”类提示 |
+| INTERNAL_ERROR | 未预期的约束/系统失败（不应向终端用户暴露堆栈） | 全局提示“系统错误，请稍后重试”等 |
+| CATEGORY_CODE_DUPLICATE | 新建分类时 `category.code` 唯一冲突 | 分类对话框等场景 |
+| CATEGORY_NAME_DUPLICATE | 新建分类时 `category.name` 唯一冲突 | 分类对话框等场景 |
 
 ---
 

@@ -104,7 +104,7 @@ public class PrdYamlSmokeTests
         {
             var r = runner.Run(plan);
             if (!r.Passed)
-                failures.Add($"{caseId}: {r.Reason}");
+                failures.Add($"{caseId}: {r.Reason} | code_ref: {r.CodeReference}");
         }
 
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));

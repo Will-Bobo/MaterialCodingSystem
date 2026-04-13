@@ -15,9 +15,12 @@ public sealed record MaterialItemStatusSnapshot(string Code, int Status);
 
 public interface IMaterialRepository
 {
-    // 约束名用于 Application 判定是否需要重试
+    // 约束名用于 Application 判定是否需要重试（与 SqliteMaterialRepository 解析结果一致）
     public const string CONSTRAINT_GROUP_CATEGORY_SERIAL = "UNIQUE(material_group.category_id, serial_no)";
     public const string CONSTRAINT_ITEM_GROUP_SUFFIX = "UNIQUE(material_item.group_id, suffix)";
+    public const string CONSTRAINT_ITEM_CATEGORY_SPEC = "UNIQUE(material_item.category_code, spec)";
+    public const string CONSTRAINT_ITEM_CODE = "UNIQUE(material_item.code)";
+    public const string CONSTRAINT_UNKNOWN = "UNKNOWN";
     public const string CONSTRAINT_CATEGORY_CODE = "UNIQUE(category.code)";
     public const string CONSTRAINT_CATEGORY_NAME = "UNIQUE(category.name)";
 

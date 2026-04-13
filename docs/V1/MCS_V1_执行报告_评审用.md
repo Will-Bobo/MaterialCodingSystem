@@ -2,8 +2,8 @@
 
 | 项 | 内容 |
 |----|------|
-| 文档版本 | 1.0 |
-| 对应基线 | PRD：`docs/MCS_PRD_V1.md`（V1.2 修正版）；TDD：`docs/MCS_TDD_V1.md` |
+| 文档版本 | 1.2（同步 Phase 4 执行结果、suffix 错误码收敛与验收基线） |
+| 对应基线 | PRD：`docs/MCS_PRD_V1.md`（含 §15.5 suffix 收敛段、§15.5.2 工程错误码附录）；TDD：`docs/MCS_TDD_V1.md` |
 | 工程范围 | 主程序 `MaterialCodingSystem`（多目标）、测试 `MaterialCodingSystem.Tests`、验收 CLI `MaterialCodingSystem.Validation` |
 | 编写目的 | 汇总技术架构、设计、ER/流程及与 PRD 的对照结论，供评审决策 |
 
@@ -32,8 +32,8 @@ Presentation（WPF / ViewModels / 视图桥接）
 - **Domain**：无 IO、无 DB、无事务；仅纯规则与领域异常语义。
 - **Application**：不写 SQL；通过 `IUnitOfWork`、`IMaterialRepository` 等接口编排；统一 `Result<T>` / 错误码。
 - **Infrastructure**：只实现接口与 SQL/文件；**不写业务规则**。
-- **Presentation**：只绑定与命令转发；**禁止**在 ViewModel 中实现唯一性、suffix 连续性、编码生成等规则；允许 **视图级事件桥接**（如焦点切换 keyword 来源）。
-- **Validation**：**仅调用 Application API**，不直接调用 Domain；YAML 为黑盒验收输入。
+- **Presentation**：只绑定与命令转发；**禁止**在 ViewModel 中实现唯一性、suffix 连续性、编码生成等规则；允许 **视图级事件桥接**（如焦点切换 keyword 来源）。**失败反馈**走 **`UiPolicy` → `UiRenderPlan` → `UiDispatcher`**，文案来自 **WPF `ResourceDictionary`**（见 2.4.1 / 2.4.2），与业务规则解耦。
+- **Validation**：**仅调用 Application API**，不直接调用 Domain；YAML 为黑盒验收输入。**`PrdActions`** 对 `create_material_replacement` **不对 suffix 类错误做二次映射**，与 Application 返回码一致；`name` / `description` 在 YAML 中可省略时由 runner 注入占位以满足 Application **非空校验**（非产品 UI 行为）。
 
 ### 1.3 多目标工程策略
 
@@ -47,8 +47,9 @@ Presentation（WPF / ViewModels / 视图桥接）
 ### 2.1 应用服务（Application）
 
 - **`MaterialApplicationService`**：主料创建、替代料创建、废弃、按编码/规格搜索、分组信息查询、分类列表/创建、**活动物料 Excel 导出**等。
+- **入参校验（Application）**：`CreateMaterialItemA` / `CreateReplacement` 对 **`name`、`description`** 做非空白校验，失败返回 **`VALIDATION_ERROR`**（与 PRD 必填口径一致；规则在 Application，不在 UI）。
 - **并发**：新建主料（流水号）与新建替代料（suffix）在 **数据库唯一约束冲突**时做 **事务级重试（最多 3 次）**，超限映射为 `CODE_CONFLICT_RETRY`（与 PRD 15.6 一致）。
-- **错误码**：至少包含 `SPEC_DUPLICATE`、`SUFFIX_OVERFLOW`、`SUFFIX_SEQUENCE_BROKEN`、`CODE_CONFLICT_RETRY`、`VALIDATION_ERROR`、`NOT_FOUND` 等；UI 按 dev-wpf 约定做字段级/全局/弹窗分流。
+- **错误码**：业务侧含 `SPEC_DUPLICATE`、`SUFFIX_OVERFLOW`、`SUFFIX_SEQUENCE_BROKEN`、`CODE_CONFLICT_RETRY`；工程侧见 PRD **§15.5.2**（`VALIDATION_ERROR`、`NOT_FOUND`、`INTERNAL_ERROR`、分类重复等）。**Suffix 连续性**（不连续、不允许补洞、删除中间 suffix 致缺口）**统一为 `SUFFIX_SEQUENCE_BROKEN`**，与 Domain `SuffixAllocator` 一致；**不再使用**校验别名 `SUFFIX_GAP_FORBIDDEN`、`SUFFIX_NO_GAP_FILL`、`SUFFIX_NO_REUSE`。UI 按 dev-wpf 约定做字段级/全局/弹窗分流。
 
 ### 2.2 领域（Domain）
 
@@ -67,6 +68,28 @@ Presentation（WPF / ViewModels / 视图桥接）
 
 - **MVVM**：`MainViewModel` 聚合各 Tab 子 ViewModel；命令使用 `RelayCommand` / `RelayCommand<T>`。
 - **PRD 9.x 相关交互（已实现部分）**：新建页 **300ms 防抖** + **当前编辑字段**作为规格搜索 keyword；候选 Top20；决策条；分类 **独立对话框**；字段级 `SPEC_DUPLICATE` 与全局/弹窗 `CODE_CONFLICT_RETRY`；替代料页 **本页编码搜索**；导出 Tab + 保存对话框与路径记忆。
+
+#### 2.4.1 UI 语义层（`Presentation/UiSemantics`）— 已收敛冻结
+
+失败与策略相关 UI **不恢复** `UiMessage` / `UiAction` / `UiRenderResult` 等多段模型；现行管线为 **单语义输出 + 双执行角色**：
+
+| 组件 | 职责 |
+|------|------|
+| **`ContextType`** | 与 `AppError` 一起作为 **唯一策略输入**（失败发生在哪一屏/哪一步）。 |
+| **`UiPolicy`** | **唯一决策源**：`(ErrorCode, ContextType) → UiRenderPlan`；只产出 **资源键**（`TextResourceKey`、`Modal` 的 body/title 键）、`Presentation`、`Severity`、`TargetBindings`、`ClearSlots`；**不在 Policy 内本地化或拼接用户可见句子**。 |
+| **`UiRenderPlan` / `UiModalPlan`** | 唯一失败管线载体；模态仅通过 **`Modal`（资源键 + Severity）** 表达，无双轨 Dialog DTO。 |
+| **`IUiRenderer` / `WpfUiRenderer`** | 技术日志、`BuildRenderPlan`（委托 `UiPolicy.Resolve`）、`ConfirmDuplicateCreate`；**不写入 ViewModel**。 |
+| **`IUiDispatcher` / `WpfUiDispatcher`** | 消费 `UiRenderPlan`：按 `ClearSlots` 清槽、解析资源键后写绑定属性、Toast 定时、`MessageBox`；**不含业务规则、不含 Policy**。 |
+| **`UiBindings`** | 绑定目标属性名的 **常量约定**（与 XAML 绑定一致）。 |
+| **`UiResources` + `UiResourceKeys`** | 运行时通过 **`Application.Current.TryFindResource`**（及测试时合并字典）解析字符串；`Format` 仅对 **字典内带 `{0}` 的模板** 填参；**禁止在 Policy/Dispatcher 层手写中文 UI 句**。 |
+
+**ViewModel 侧约定**：失败路径为 `BuildRenderPlan` → `Apply`；进度/成功等文案通过 **`UiResources.Get/Format(UiResourceKeys.*)`** 从资源解析，**不在 VM 内硬编码中文句子**（与单向数据流、可本地化目标一致）。
+
+#### 2.4.2 WPF 资源字典（`Presentation/Resources`）
+
+- **`App.xaml`** 合并：**`UiErrors.xaml`**（`Error.*` 错误文案）、**`UiStrings.xaml`**（`Info.*` / `Hint.*` / `Dialog.*` / `Confirm.*` 等）、**`UiStyles.xaml`**（应用级样式与共享画刷/转换器，如 `BoolToVis`、`ModernTextBox` 等）。
+- **已移除**单文件 `UiResources.xaml`；文案按 **错误 / 非错误** 分字典，便于评审与后续本地化维护。
+- **单元测试**：`MaterialCodingSystem.Tests` 将 `UiErrors.xaml`、`UiStrings.xaml` 复制到输出目录，并通过 **`UiResources.LoadDictionariesForTests`** 合并加载，保证无 `Application` 时的解析与断言。
 
 ### 2.5 与 PRD 第十六章「Repository 拆分」的关系
 
@@ -113,7 +136,7 @@ Category（分类）
 
 ### 4.2 新建替代料（B–Z）
 
-1. 加载组快照与已有 suffix；**Domain** 校验连续性与下一后缀；溢出 → `SUFFIX_OVERFLOW`。
+1. 加载组快照与已有 suffix；**Domain** 校验连续性与下一后缀；不连续/缺口 → **`SUFFIX_SEQUENCE_BROKEN`**；已连续至 **Z** 再追加 → **`SUFFIX_OVERFLOW`**。
 2. 校验同分类 `spec` 未重复；事务内插入新行；`UNIQUE(group_id, suffix)` 冲突 → 重试策略同主料思路。
 
 ### 4.3 废弃
@@ -140,14 +163,25 @@ Category（分类）
 ### 5.1 自动化测试
 
 - **Domain**：规范化、suffix、编码、实体行为等单元测试。
-- **Application**：Mock 仓储的用例与重试行为。
-- **Infrastructure**：SQLite 内存集成测试（创建、并发、搜索、导出等）。
-- **Presentation**：关键 ViewModel 行为（如 keyword 来源、防抖配合下的搜索参数）在可测环境下用同步 Debouncer 验证。
+- **Application**：Mock 仓储的用例与重试行为（含 **`name` / `description` 必填**、suffix 序列与约束映射等）。
+- **Infrastructure**：SQLite 内存集成测试（创建、并发、搜索、导出、唯一约束映射等）。
+- **Presentation**：关键 ViewModel 行为（如 keyword 来源、防抖配合下的搜索参数）在可测环境下用同步 Debouncer 验证；失败反馈链路可结合 **`WpfUiRenderer` + `WpfUiDispatcher`** 与资源字典做集成级断言（如 `SPEC_DUPLICATE` → 规格字段错误文案与 `Error.SpecDuplicate` 一致）。
+
+**当前执行结果（仓库最近一次 `dotnet test` 基线）**：
+
+| 项目 | 结果 |
+|------|------|
+| `MaterialCodingSystem.Tests` | **96** 通过，0 失败 |
+| `MaterialCodingSystem.Validation.Tests` | **14** 通过，0 失败（含 `PrdV1_Yaml_All_Cases_Pass`） |
 
 ### 5.2 YAML 黑盒验收
 
-- `MaterialCodingSystem.Validation` 解析 `PRD_V1.yaml`，每 case 独立 SQLite；**`then.error.code` 与 YAML 不一致时视为冲突**（以 YAML 为验收事实源时的团队约定）。
-- **当前状态（执行期结论）**：全量 Case 曾以 CLI 跑通且无 FAIL（具体 case 数以仓库内 YAML 为准）。
+- `MaterialCodingSystem.Validation` 解析 **`MaterialCodingSystem.Validation/specs/PRD_V1.yaml`**，每 case 独立 SQLite；**`then.error.code` 断言与 Application 返回一致**（不在 `PrdActions` 层对 suffix 错误做别名转换）。
+- **当前状态（执行期结论）**：
+  - **Case 数量**：**22**（已合并/删除与 suffix 连续性重复的用例，并与统一错误码对齐）。
+  - **CLI**：`dotnet run --project MaterialCodingSystem.Validation -- <path>/PRD_V1.yaml` → **`PASS=22, FAIL=0`**，进程退出码 **0**。
+  - **Suffix 相关用例**：缺口/不连续场景断言 **`SUFFIX_SEQUENCE_BROKEN`**；**A–Z 已满**再建替代料断言 **`SUFFIX_OVERFLOW`**（YAML 中种子为同组连续 A–Z）。
+- **仓储约束映射**：`SqliteMaterialRepository` 按 SQLite 消息区分 **`UNIQUE(category_code, spec)`** 与 **`code`** 等约束，Application 映射为 **`SPEC_DUPLICATE`** / **`CODE_CONFLICT_RETRY`** 等（与 Phase 4 预校验一致）。
 
 ---
 
@@ -186,6 +220,8 @@ Category（分类）
 - **SQLite 单写者模型**：仅适合低并发写入；高并发批量写入不在设计承诺内（PRD 第十一章）。
 - **PRD 与 YAML**：若 YAML 为验收事实源，业务代码与 YAML 期望冲突时，应**显式升级 YAML 或修正实现**，避免静默改期望。
 - **单仓储 vs 多仓储**：随代码量增长可考虑按 PRD 第十六章拆分，降低 SQL 维护成本。
+- **UI 文案与资源键**：新增或修改用户可见文案应 **只改 XAML 资源 + `UiResourceKeys` 常量 +（必要时）`UiPolicy` 分支**；避免在 C# 中拼接中文句子，以免绕过资源体系与评审 diff。
+- **主窗口等视图内联中文**：部分 `MainWindow.xaml` / 对话框仍可能存在 **直接写在 XAML 上的中文标签**（非绑定字段）；若要求「界面零字面中文」，需后续改为 `StaticResource` 或绑定到资源键，与 **2.4.2** 统一。
 
 ---
 
@@ -198,6 +234,9 @@ Category（分类）
 | 本报告 | `docs/V1/MCS_V1_执行报告_评审用.md` |
 | 验收规格 | `MaterialCodingSystem.Validation/specs/PRD_V1.yaml` |
 | 主程序分层 | `MaterialCodingSystem/Application`、`Domain`、`Infrastructure`、`Presentation` |
+| UI 语义层 | `MaterialCodingSystem/Presentation/UiSemantics`（`UiPolicy`、`UiRenderPlan`、`UiRenderer`、`UiDispatcher`、`UiResources`/`UiResourceKeys`、`ContextType`、`UiBindings`） |
+| UI 资源字典 | `MaterialCodingSystem/Presentation/Resources/UiErrors.xaml`、`UiStrings.xaml`、`UiStyles.xaml`；入口合并见 `App.xaml` |
+| DI 入口 | `MaterialCodingSystem/App.xaml.cs` |
 | Schema | `MaterialCodingSystem/Infrastructure/Sqlite/SqliteSchema.cs` |
 | 应用服务 | `MaterialCodingSystem/Application/MaterialApplicationService.cs` |
 

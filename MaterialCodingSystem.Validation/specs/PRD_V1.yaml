@@ -187,8 +187,8 @@ cases:
 # =====================================================
 # 6. suffix连续性约束（核心规则）
 # =====================================================
-  - id: SUFFIX_GAP_FORBIDDEN_001
-    title: suffix不连续禁止创建
+  - id: SUFFIX_SEQUENCE_BROKEN_001
+    title: suffix不连续禁止创建（与 Application SUFFIX_SEQUENCE_BROKEN 一致）
     type: core
 
     given:
@@ -208,7 +208,7 @@ cases:
 
     then:
       error:
-        code: SUFFIX_GAP_FORBIDDEN
+        code: SUFFIX_SEQUENCE_BROKEN
 
     replay: true
     deterministic: true
@@ -218,14 +218,42 @@ cases:
 # 7. suffix上限Z
 # =====================================================
   - id: SUFFIX_OVERFLOW_001
-    title: 超过Z禁止创建
+    title: 超过Z禁止创建（同组已连续 A–Z 时下一后缀溢出）
     type: edge
 
     given:
       db:
+        material_group:
+          - id: 1
+            category_code: ZDA
+            serial_no: 1
         material_item:
-          - group_id: 1
-            suffix: Z
+          - { group_id: 1, suffix: A }
+          - { group_id: 1, suffix: B }
+          - { group_id: 1, suffix: C }
+          - { group_id: 1, suffix: D }
+          - { group_id: 1, suffix: E }
+          - { group_id: 1, suffix: F }
+          - { group_id: 1, suffix: G }
+          - { group_id: 1, suffix: H }
+          - { group_id: 1, suffix: I }
+          - { group_id: 1, suffix: J }
+          - { group_id: 1, suffix: K }
+          - { group_id: 1, suffix: L }
+          - { group_id: 1, suffix: M }
+          - { group_id: 1, suffix: N }
+          - { group_id: 1, suffix: O }
+          - { group_id: 1, suffix: P }
+          - { group_id: 1, suffix: Q }
+          - { group_id: 1, suffix: R }
+          - { group_id: 1, suffix: S }
+          - { group_id: 1, suffix: T }
+          - { group_id: 1, suffix: U }
+          - { group_id: 1, suffix: V }
+          - { group_id: 1, suffix: W }
+          - { group_id: 1, suffix: X }
+          - { group_id: 1, suffix: Y }
+          - { group_id: 1, suffix: Z }
 
       input:
         group_id: 1
@@ -298,9 +326,6 @@ cases:
 
     replay: true
     deterministic: false
-
-  
-cases:
 
 # =====================================================
 # 10. category validation（分类合法性）
@@ -427,9 +452,6 @@ cases:
     replay: true
     deterministic: true
 
-    replay: true
-    deterministic: true
-
 
   - id: NORMALIZE_EDGE_002
     title: 中英混合文本（不做语义提取）
@@ -499,39 +521,10 @@ cases:
 
 
 # =====================================================
-# 14. suffix policy ambiguity（补齐歧义规则）
+# 14. suffix policy（删除中间 suffix 后数据不连续 → 与缺口场景同一错误码）
 # =====================================================
   - id: SUFFIX_POLICY_AMBIGUITY_001
-    title: 删除中间 suffix 是否允许复用（必须明确）
-    type: invariant
-
-    given:
-      db:
-        material_item:
-          - group_id: 1
-            suffix: A
-          - group_id: 1
-            suffix: B
-          - group_id: 1
-            suffix: C
-
-      input:
-        group_id: 1
-        deleted_suffix: B
-
-    when:
-      action: create_material_replacement
-
-    then:
-      error:
-        code: SUFFIX_NO_REUSE   # PRD冻结：不可复用历史 suffix
-
-    replay: true
-    deterministic: true
-
-
-  - id: SUFFIX_POLICY_AMBIGUITY_002
-    title: suffix生成必须严格递增，不允许补洞
+    title: 删除中间 suffix 后仅存 A/C（不连续）禁止创建替代料
     type: invariant
 
     given:
@@ -544,13 +537,14 @@ cases:
 
       input:
         group_id: 1
+        spec: xxx
 
     when:
       action: create_material_replacement
 
     then:
       error:
-        code: SUFFIX_NO_GAP_FILL
+        code: SUFFIX_SEQUENCE_BROKEN
 
     replay: true
     deterministic: true

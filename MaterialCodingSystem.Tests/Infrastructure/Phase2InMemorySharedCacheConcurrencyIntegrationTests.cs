@@ -75,9 +75,7 @@ public class Phase2InMemorySharedCacheConcurrencyIntegrationTests
 
         Assert.Equal(1, bag.Count(x => x.Ok));
         Assert.All(bag.Where(x => !x.Ok), x =>
-            Assert.True(
-                x.Err == ErrorCodes.SPEC_DUPLICATE || x.Err == ErrorCodes.CODE_CONFLICT_RETRY,
-                $"unexpected err={x.Err}"));
+            Assert.Equal(ErrorCodes.SPEC_DUPLICATE, x.Err));
     }
 
     [Fact]
@@ -125,5 +123,50 @@ public class Phase2InMemorySharedCacheConcurrencyIntegrationTests
             new { g = groupId })).Select(s => s[0]).ToList();
         Assert.Equal(1 + n, suffixes.Count);
         Assert.Equal(suffixes.Count, suffixes.Distinct().Count());
+    }
+
+    /// <summary>
+    /// 并发替代料、相同 spec：唯一性约束下仅一条成功，其余 <see cref="ErrorCodes.SPEC_DUPLICATE"/>（后缀槽位与 spec 联合语义）。
+    /// </summary>
+    [Fact]
+    public async Task ParallelCreateReplacement_SameSpec_OneSuccess_RestSPEC_DUPLICATE()
+    {
+        var name = $"mcs_phase2_repl_same_{Guid.NewGuid():N}";
+        await using var db = await SqliteTestDb.CreateSharedAsync(name);
+        await db.Connection.ExecuteAsync("INSERT INTO category(code,name) VALUES ('ZDA','电阻');");
+
+        var initApp = new MaterialApplicationService(new SqliteUnitOfWork(db.Connection), new SqliteMaterialRepository(db.Connection));
+        var a = await initApp.CreateMaterialItemA(new CreateMaterialItemARequest(
+            CategoryCode: "ZDA",
+            Spec: "SPEC-A-BASE",
+            Name: "n",
+            Description: "d",
+            Brand: "b"
+        ));
+        Assert.True(a.IsSuccess);
+        var groupId = a.Data!.GroupId;
+
+        const int n = 10;
+        var bag = new ConcurrentBag<(bool Ok, string? Err)>();
+
+        await Parallel.ForEachAsync(Enumerable.Range(0, n), async (_, ct) =>
+        {
+            await using var conn = new SqliteConnection(db.ConnectionString);
+            await conn.OpenAsync(ct);
+            var app = new MaterialApplicationService(new SqliteUnitOfWork(conn), new SqliteMaterialRepository(conn));
+
+            var res = await app.CreateReplacement(new CreateReplacementRequest(
+                GroupId: groupId,
+                Spec: "SHARED-REPL-SPEC",
+                Name: "n",
+                Description: "d",
+                Brand: "b"
+            ));
+            bag.Add((res.IsSuccess, res.Error?.Code));
+        });
+
+        Assert.Equal(1, bag.Count(x => x.Ok));
+        Assert.All(bag.Where(x => !x.Ok), x =>
+            Assert.Equal(ErrorCodes.SPEC_DUPLICATE, x.Err));
     }
 }
