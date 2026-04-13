@@ -336,6 +336,47 @@ LIMIT 20;";
         return new PagedResult<MaterialItemSpecHit>(Total: items.Count, Items: items);
     }
 
+    public async Task<PagedResult<MaterialItemSpecHit>> SearchBySpecAllAsync(string keyword, bool includeDeprecated, int limit, CancellationToken ct = default)
+    {
+        var statusFilter = includeDeprecated ? "" : "AND mi.status = 1";
+        var sql = $@"
+SELECT
+  mi.code AS Code,
+  mi.spec AS Spec,
+  mi.description AS Description,
+  mi.name AS Name,
+  mi.brand AS Brand,
+  mi.status AS Status,
+  mi.group_id AS GroupId
+FROM material_item mi
+JOIN material_group mg ON mi.group_id = mg.id
+WHERE (
+       mi.spec LIKE '%' || @keyword || '%'
+    OR mi.spec_normalized LIKE '%' || @keyword || '%'
+  )
+  {statusFilter}
+ORDER BY
+  CASE
+    WHEN mi.spec LIKE '%' || @keyword || '%' THEN 0
+    WHEN mi.spec_normalized LIKE '%' || @keyword || '%' THEN 1
+    ELSE 2
+  END,
+  mi.category_code,
+  mg.serial_no,
+  mi.suffix,
+  mi.code
+LIMIT @limit;";
+
+        var items = (await _connection.QueryAsync<MaterialItemSpecHit>(new CommandDefinition(
+            sql,
+            new { keyword, limit },
+            transaction: Tx,
+            cancellationToken: ct
+        ))).ToList();
+
+        return new PagedResult<MaterialItemSpecHit>(Total: items.Count, Items: items);
+    }
+
     public async Task<IReadOnlyList<MaterialExportRow>> ListActiveItemsForExportAsync(CancellationToken ct = default)
     {
         var sql = @"

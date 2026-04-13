@@ -19,11 +19,13 @@
     <Compile Remove="App.xaml.cs" />
     <Compile Remove="MainWindow.xaml.cs" />
     <Compile Remove="CategoryDialogWindow.xaml.cs" />
+    <Compile Remove="DeprecateConfirmWindow.xaml.cs" />
     <Compile Remove="AssemblyInfo.cs" />
     <Compile Remove="Presentation\**\*.cs" />
     <Page Remove="App.xaml" />
     <Page Remove="MainWindow.xaml" />
     <Page Remove="CategoryDialogWindow.xaml" />
+    <Page Remove="DeprecateConfirmWindow.xaml" />
   </ItemGroup>
 
   <ItemGroup>

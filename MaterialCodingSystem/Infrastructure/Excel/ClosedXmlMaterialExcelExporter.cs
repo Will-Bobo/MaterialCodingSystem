@@ -55,6 +55,9 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
             .ThenBy(r => r.Suffix, StringComparer.Ordinal)
             .ThenBy(r => r.Code, StringComparer.Ordinal);
 
+        var ok = XLColor.FromHtml("#16A34A");
+        var bad = XLColor.FromHtml("#DC2626");
+
         var row = 2;
         foreach (var item in ordered)
         {
@@ -65,7 +68,9 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
             ws.Cell(row, 4).Value = item.Spec;
             ws.Cell(row, 5).Value = item.Description;
             ws.Cell(row, 6).Value = item.Brand ?? "";
-            ws.Cell(row, 7).Value = statusText;
+            var statusCell = ws.Cell(row, 7);
+            statusCell.Value = statusText;
+            statusCell.Style.Font.FontColor = item.Status == 1 ? ok : bad;
             row++;
         }
     }

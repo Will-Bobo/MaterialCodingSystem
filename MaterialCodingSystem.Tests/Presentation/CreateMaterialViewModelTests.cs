@@ -1,5 +1,6 @@
 using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Contracts;
+using MaterialCodingSystem.Presentation.Models;
 using MaterialCodingSystem.Presentation.Scheduling;
 using MaterialCodingSystem.Presentation.UiSemantics;
 using MaterialCodingSystem.Presentation.ViewModels;
@@ -43,7 +44,7 @@ public sealed class CreateMaterialViewModelTests
 
         public bool ConfirmDuplicateCreate() => true;
 
-        public bool ConfirmDeprecate(string code) => true;
+        public Task<bool> ConfirmDeprecateAsync(DeprecateConfirmModel model) => Task.FromResult(true);
     }
 
     private sealed class NoopUiDispatcher : IUiDispatcher

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using MaterialCodingSystem.Application.Contracts;
+using MaterialCodingSystem.Presentation.Models;
 
 namespace MaterialCodingSystem.Presentation.UiSemantics;
 
@@ -12,7 +13,7 @@ public interface IUiRenderer
 
     bool ConfirmDuplicateCreate();
 
-    bool ConfirmDeprecate(string code);
+    Task<bool> ConfirmDeprecateAsync(DeprecateConfirmModel model);
 }
 
 public sealed class WpfUiRenderer : IUiRenderer
@@ -36,14 +37,13 @@ public sealed class WpfUiRenderer : IUiRenderer
         return r == System.Windows.MessageBoxResult.Yes;
     }
 
-    public bool ConfirmDeprecate(string code)
+    public Task<bool> ConfirmDeprecateAsync(DeprecateConfirmModel model)
     {
-        var body = UiResources.Format(UiResourceKeys.Confirm.DeprecateBody, code);
-        var r = System.Windows.MessageBox.Show(
-            body,
-            UiResources.Get(UiResourceKeys.Confirm.DeprecateTitle),
-            System.Windows.MessageBoxButton.YesNo,
-            System.Windows.MessageBoxImage.Warning);
-        return r == System.Windows.MessageBoxResult.Yes;
+        var dlg = new DeprecateConfirmWindow(model)
+        {
+            Owner = System.Windows.Application.Current?.MainWindow
+        };
+        var r = dlg.ShowDialog();
+        return Task.FromResult(r == true);
     }
 }

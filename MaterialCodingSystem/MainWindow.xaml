@@ -15,6 +15,7 @@
         <SolidColorBrush x:Key="Brush.Overlay.Loading" Color="#99FFFFFF"/>
         <conv:StatusToTextConverter x:Key="StatusToText"/>
         <conv:StatusToIsActiveBoolConverter x:Key="StatusToIsActiveBool"/>
+        <conv:StatusToBrushConverter x:Key="StatusToBrush"/>
 
         <Style TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI"/>
@@ -344,7 +345,14 @@
                                 <DataGridTextColumn Header="规格号" Binding="{Binding Spec}" Width="200"/>
                                 <DataGridTextColumn Header="规格描述" Binding="{Binding Description}" Width="*"/>
                                 <DataGridTextColumn Header="状态" Width="80"
-                                                    Binding="{Binding Status, Converter={StaticResource StatusToText}}"/>
+                                                    Binding="{Binding Status, Converter={StaticResource StatusToText}}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{Binding Status, Converter={StaticResource StatusToBrush}}"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
                                 <DataGridTemplateColumn Header="操作" Width="120">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
@@ -512,7 +520,14 @@
                             <DataGridTextColumn Header="规格号" Binding="{Binding Spec}" Width="*"/>
                             <DataGridTextColumn Header="品牌" Binding="{Binding Brand}" Width="120"/>
                             <DataGridTextColumn Header="状态" Width="80"
-                                                Binding="{Binding Status, Converter={StaticResource StatusToText}}"/>
+                                                Binding="{Binding Status, Converter={StaticResource StatusToText}}">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{Binding Status, Converter={StaticResource StatusToBrush}}"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
                             <DataGridTemplateColumn Header="操作" Width="220">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
@@ -577,7 +592,14 @@
                             <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="140"/>
                             <DataGridTextColumn Header="品牌" Binding="{Binding Brand}" Width="120"/>
                             <DataGridTextColumn Header="状态" Width="80"
-                                                Binding="{Binding Status, Converter={StaticResource StatusToText}}"/>
+                                                Binding="{Binding Status, Converter={StaticResource StatusToText}}">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{Binding Status, Converter={StaticResource StatusToBrush}}"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
                             <DataGridTemplateColumn Header="操作" Width="220">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>

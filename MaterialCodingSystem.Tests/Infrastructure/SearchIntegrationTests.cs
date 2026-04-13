@@ -70,5 +70,56 @@ public class SearchIntegrationTests
         Assert.True(search.IsSuccess);
         Assert.True(search.Data!.Items.Count >= 2);
     }
+
+    [Fact]
+    public async Task SearchBySpecAll_ReturnsTop20_AndOrdersStably_AcrossCategories()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        var conn = db.Connection;
+
+        await conn.ExecuteAsync("INSERT INTO category(code,name) VALUES ('ZDA','A'),('ZDB','B'),('ZDC','C');");
+
+        // Groups: serial_no controls stable ordering
+        await conn.ExecuteAsync(@"
+INSERT INTO material_group(id,category_id,category_code,serial_no) VALUES
+ (1,1,'ZDA',2),
+ (2,2,'ZDB',1),
+ (3,3,'ZDC',3);");
+
+        // Seed 30 rows that all match keyword via spec or spec_normalized, with mixed status
+        // Make some direct spec hits ("UF") and others only normalized hits ("uF")
+        for (var i = 0; i < 30; i++)
+        {
+            var groupId = i % 3 + 1;
+            var cat = groupId == 1 ? "ZDA" : groupId == 2 ? "ZDB" : "ZDC";
+            var serial = groupId == 1 ? 2 : groupId == 2 ? 1 : 3;
+            var suffix = (char)('A' + (i / 3)); // ensure unique within group_id
+            var code = $"{cat}{serial:D7}{suffix}";
+            var spec = i % 2 == 0 ? $"X{ i }UF" : $"X{ i }uF";
+            var desc = "10uF 16V";
+            var status = i % 5 == 0 ? 0 : 1;
+
+            await conn.ExecuteAsync(@"
+INSERT INTO material_item(group_id,category_id,category_code,code,suffix,name,description,spec,spec_normalized,brand,status)
+VALUES (@groupId, (SELECT category_id FROM material_group WHERE id=@groupId), @cat, @code, @suffix, 'n', @desc, @spec, @spec, 'b', @status);",
+                new { groupId, cat, code, suffix = suffix.ToString(), desc, spec, status });
+        }
+
+        var app = new MaterialApplicationService(new SqliteUnitOfWork(conn), new SqliteMaterialRepository(conn));
+
+        var r1 = await app.SearchBySpecAllAsync("UF", includeDeprecated: false, limit: 20);
+        Assert.True(r1.IsSuccess);
+        Assert.True(r1.Data!.Items.Count <= 20);
+        Assert.DoesNotContain(r1.Data.Items, x => x.Status == 0);
+
+        var r2 = await app.SearchBySpecAllAsync("UF", includeDeprecated: false, limit: 20);
+        Assert.True(r2.IsSuccess);
+        Assert.Equal(r1.Data.Items.Select(x => x.Code).ToArray(), r2.Data!.Items.Select(x => x.Code).ToArray());
+
+        var r3 = await app.SearchBySpecAllAsync("UF", includeDeprecated: true, limit: 20);
+        Assert.True(r3.IsSuccess);
+        Assert.True(r3.Data!.Items.Count <= 20);
+        Assert.Contains(r3.Data.Items, x => x.Status == 0);
+    }
 }
 

@@ -55,6 +55,8 @@ public interface IMaterialRepository
 
     Task<PagedResult<MaterialItemSpecHit>> SearchBySpecAsync(SearchQuery query, CancellationToken ct = default);
 
+    Task<PagedResult<MaterialItemSpecHit>> SearchBySpecAllAsync(string keyword, bool includeDeprecated, int limit, CancellationToken ct = default);
+
     /// <summary>PRD 7.4：仅 status=1，按 category_code, serial_no, suffix 排序。</summary>
     Task<IReadOnlyList<MaterialExportRow>> ListActiveItemsForExportAsync(CancellationToken ct = default);
 

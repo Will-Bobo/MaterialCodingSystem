@@ -593,6 +593,24 @@ public sealed class MaterialApplicationService
             return Result<PagedResult<MaterialItemSpecHit>>.Ok(await _repo.SearchBySpecAsync(fixedQuery, ct));
         }, ct);
 
+    public Task<Result<PagedResult<MaterialItemSpecHit>>> SearchBySpecAllAsync(
+        string keyword,
+        bool includeDeprecated,
+        int limit = 20,
+        CancellationToken ct = default
+    )
+        => _uow.ExecuteAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(keyword))
+            {
+                return Result<PagedResult<MaterialItemSpecHit>>.Fail(ErrorCodes.VALIDATION_ERROR, "spec_keyword is required.");
+            }
+
+            var fixedLimit = Math.Min(limit <= 0 ? 20 : limit, 20);
+            return Result<PagedResult<MaterialItemSpecHit>>.Ok(
+                await _repo.SearchBySpecAllAsync(keyword.Trim(), includeDeprecated, fixedLimit, ct));
+        }, ct);
+
     public Task<Result<ExportMaterialsResponse>> ExportActiveMaterials(string filePath, CancellationToken ct = default)
     {
         if (_excelExporter is null)

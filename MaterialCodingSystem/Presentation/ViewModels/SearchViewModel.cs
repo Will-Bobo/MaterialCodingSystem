@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Contracts;
+using MaterialCodingSystem.Presentation.Models;
 using MaterialCodingSystem.Presentation.UiSemantics;
 
 namespace MaterialCodingSystem.Presentation.ViewModels;
@@ -85,8 +86,9 @@ public sealed class SearchViewModel : ViewModelBase
             Categories.Add(c);
         }
 
-        var prev = SelectedCategory?.Code;
-        SelectedCategory = Categories.FirstOrDefault(x => x.Code == prev) ?? Categories.FirstOrDefault();
+        // UI: 默认“全部”，允许不选分类也能查
+        Categories.Insert(0, new CategoryDto("*", "全部分类"));
+        SelectedCategory = Categories.FirstOrDefault();
     }
 
     private async Task SearchByCodeAsync()
@@ -120,21 +122,21 @@ public sealed class SearchViewModel : ViewModelBase
         SpecResults.Clear();
         SelectedSpecResult = null;
 
-        var categoryCode = SelectedCategory?.Code?.Trim() ?? "";
-        if (string.IsNullOrWhiteSpace(categoryCode))
-        {
-            Message = UiResources.Get(UiResourceKeys.Hint.SelectCategory);
-            return;
-        }
+        var categoryCode = SelectedCategory?.Code?.Trim() ?? "*";
 
-        var res = await _app.SearchBySpec(new SearchQuery(
-            CodeKeyword: null,
-            SpecKeyword: SpecKeyword,
-            CategoryCode: categoryCode,
-            IncludeDeprecated: IncludeDeprecated,
-            Limit: 20,
-            Offset: 0
-        ));
+        if (!string.IsNullOrWhiteSpace(SpecKeyword) && SpecKeyword.Trim().Length < 2)
+            Message = "关键词过短，结果可能不稳定";
+
+        var res = categoryCode == "*"
+            ? await _app.SearchBySpecAllAsync(SpecKeyword, IncludeDeprecated, limit: 20)
+            : await _app.SearchBySpec(new SearchQuery(
+                CodeKeyword: null,
+                SpecKeyword: SpecKeyword,
+                CategoryCode: categoryCode,
+                IncludeDeprecated: IncludeDeprecated,
+                Limit: 20,
+                Offset: 0
+            ));
 
         if (!res.IsSuccess)
         {
@@ -179,7 +181,8 @@ public sealed class SearchViewModel : ViewModelBase
         if (status == 0)
             return;
 
-        if (!_uiRenderer.ConfirmDeprecate(code))
+        var model = BuildDeprecateConfirmModel(code);
+        if (!await _uiRenderer.ConfirmDeprecateAsync(model))
             return;
 
         Message = UiResources.Get(UiResourceKeys.Info.DeprecateProcessing);
@@ -196,5 +199,36 @@ public sealed class SearchViewModel : ViewModelBase
 
         var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.Deprecate);
         _uiDispatcher.Apply(plan, this);
+    }
+
+    private DeprecateConfirmModel BuildDeprecateConfirmModel(string code)
+    {
+        var specHit = SpecResults.FirstOrDefault(x => x.Code == code);
+        if (specHit is not null)
+        {
+            return new DeprecateConfirmModel
+            {
+                Code = specHit.Code,
+                Spec = specHit.Spec,
+                Description = specHit.Description,
+                Name = specHit.Name,
+                Brand = specHit.Brand
+            };
+        }
+
+        var codeHit = CodeResults.FirstOrDefault(x => x.Code == code);
+        if (codeHit is not null)
+        {
+            return new DeprecateConfirmModel
+            {
+                Code = codeHit.Code,
+                Spec = codeHit.Spec,
+                Description = codeHit.Description,
+                Name = codeHit.Name,
+                Brand = codeHit.Brand
+            };
+        }
+
+        return new DeprecateConfirmModel { Code = code };
     }
 }

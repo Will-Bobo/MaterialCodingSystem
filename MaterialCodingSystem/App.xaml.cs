@@ -24,9 +24,7 @@ public partial class App : System.Windows.Application
 
         var sc = new ServiceCollection();
 
-        var dataDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MaterialCodingSystem");
+        var dataDir = Path.Combine(AppContext.BaseDirectory, "MaterialCodingSystem");
         Directory.CreateDirectory(dataDir);
         var dbPath = Path.Combine(dataDir, "mcs.db");
         var prefsPath = Path.Combine(dataDir, "preferences.json");
