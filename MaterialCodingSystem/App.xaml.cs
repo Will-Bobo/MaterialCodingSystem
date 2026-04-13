@@ -5,6 +5,7 @@ using MaterialCodingSystem.Infrastructure.Preferences;
 using MaterialCodingSystem.Infrastructure.Sqlite;
 using MaterialCodingSystem.Presentation.Scheduling;
 using MaterialCodingSystem.Presentation.Services;
+using MaterialCodingSystem.Presentation.UiSemantics;
 using MaterialCodingSystem.Presentation.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using System.IO;
@@ -31,7 +32,8 @@ public partial class App : System.Windows.Application
         var prefsPath = Path.Combine(dataDir, "preferences.json");
 
         sc.AddSingleton<IExportPathPreferenceStore>(_ => new JsonExportPathPreferenceStore(prefsPath));
-        sc.AddSingleton<IDialogService, WpfDialogService>();
+        sc.AddSingleton<IUiRenderer, WpfUiRenderer>();
+        sc.AddSingleton<IUiDispatcher, WpfUiDispatcher>();
         sc.AddSingleton<IFileSaveDialog, WpfSaveExcelFileDialog>();
         sc.AddSingleton<IExcelMaterialExporter, ClosedXmlMaterialExcelExporter>();
         sc.AddSingleton<IDebouncer>(_ => new WpfDebouncer(Dispatcher.CurrentDispatcher));

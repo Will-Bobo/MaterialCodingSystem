@@ -4,12 +4,15 @@ using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
 using MaterialCodingSystem.Presentation.Scheduling;
 using MaterialCodingSystem.Presentation.Services;
+using MaterialCodingSystem.Presentation.UiSemantics;
 
 namespace MaterialCodingSystem.Presentation.ViewModels;
 
 public sealed class MainViewModel : ViewModelBase
 {
     private readonly MaterialApplicationService _app;
+    private readonly IUiRenderer _uiRenderer;
+    private readonly IUiDispatcher _uiDispatcher;
 
     private int _selectedTabIndex;
     public int SelectedTabIndex { get => _selectedTabIndex; set => SetProperty(ref _selectedTabIndex, value); }
@@ -23,28 +26,32 @@ public sealed class MainViewModel : ViewModelBase
     public MainViewModel(
         MaterialApplicationService app,
         IDebouncer debouncer,
-        IDialogService dialogService,
+        IUiRenderer uiRenderer,
+        IUiDispatcher uiDispatcher,
         IExportPathPreferenceStore exportPathStore,
         IFileSaveDialog saveDialog)
     {
         _app = app;
+        _uiRenderer = uiRenderer;
+        _uiDispatcher = uiDispatcher;
 
         CreateMaterial = new CreateMaterialViewModel(
             app,
             debouncer,
-            dialogService,
+            uiRenderer,
+            uiDispatcher,
             NavigateToReplacementFromCandidateAsync,
             OpenAddCategoryDialog);
 
-        CreateReplacement = new CreateReplacementViewModel(app, dialogService);
-        Search = new SearchViewModel(app, this);
-        Deprecate = new DeprecateViewModel(app);
-        Export = new ExportViewModel(app, exportPathStore, saveDialog);
+        CreateReplacement = new CreateReplacementViewModel(app, uiRenderer, uiDispatcher);
+        Search = new SearchViewModel(app, this, uiRenderer, uiDispatcher);
+        Deprecate = new DeprecateViewModel(app, uiRenderer, uiDispatcher);
+        Export = new ExportViewModel(app, exportPathStore, saveDialog, uiRenderer, uiDispatcher);
     }
 
     private Task OpenAddCategoryDialog()
     {
-        var dlg = new CategoryDialogWindow(_app);
+        var dlg = new CategoryDialogWindow(_app, _uiRenderer, _uiDispatcher);
         if (global::System.Windows.Application.Current.MainWindow != null)
             dlg.Owner = global::System.Windows.Application.Current.MainWindow;
         dlg.ShowDialog();
@@ -53,7 +60,6 @@ public sealed class MainViewModel : ViewModelBase
 
     public async Task NavigateToReplacementFromExistingCodeAsync(string existingCode)
     {
-        // 0=A, 1=替代料, 2=搜索/废弃, 3=导出
         SelectedTabIndex = 1;
         CreateReplacement.ExistingItemCode = existingCode;
         await CreateReplacement.ResolveGroupAndReportAsync();

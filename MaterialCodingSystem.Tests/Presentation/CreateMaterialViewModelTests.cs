@@ -1,7 +1,7 @@
 using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Presentation.Scheduling;
-using MaterialCodingSystem.Presentation.Services;
+using MaterialCodingSystem.Presentation.UiSemantics;
 using MaterialCodingSystem.Presentation.ViewModels;
 using MaterialCodingSystem.Tests.Application;
 
@@ -9,6 +9,14 @@ namespace MaterialCodingSystem.Tests.Presentation;
 
 public sealed class CreateMaterialViewModelTests
 {
+    static CreateMaterialViewModelTests()
+    {
+        var dir = AppContext.BaseDirectory;
+        UiResources.LoadDictionariesForTests(
+            Path.Combine(dir, "UiErrors.xaml"),
+            Path.Combine(dir, "UiStrings.xaml"));
+    }
+
     private sealed class SynchronousDebouncer : IDebouncer
     {
         public void Debounce(object key, TimeSpan delay, Func<CancellationToken, Task> work)
@@ -17,13 +25,30 @@ public sealed class CreateMaterialViewModelTests
         }
     }
 
-    private sealed class NoopDialogService : IDialogService
+    private sealed class NoopUiRenderer : IUiRenderer
     {
-        public void ShowWarning(string title, string message)
+        public UiRenderPlan BuildRenderPlan(AppError error, ContextType context) =>
+            new(
+                "",
+                UiPresentation.Banner,
+                UiSeverity.Error,
+                Array.Empty<string>(),
+                "",
+                UiClearStrategy.None,
+                null);
+
+        public void LogTechnicalFailure(AppError error)
         {
         }
 
-        public bool ConfirmCreateDespitePossibleDuplicate() => true;
+        public bool ConfirmDuplicateCreate() => true;
+    }
+
+    private sealed class NoopUiDispatcher : IUiDispatcher
+    {
+        public void Apply(UiRenderPlan plan, object host)
+        {
+        }
     }
 
     [Fact]
@@ -35,7 +60,8 @@ public sealed class CreateMaterialViewModelTests
         var vm = new CreateMaterialViewModel(
             app,
             new SynchronousDebouncer(),
-            new NoopDialogService(),
+            new NoopUiRenderer(),
+            new NoopUiDispatcher(),
             _ => Task.CompletedTask,
             () => Task.CompletedTask);
 
@@ -59,7 +85,8 @@ public sealed class CreateMaterialViewModelTests
         var vm = new CreateMaterialViewModel(
             app,
             new SynchronousDebouncer(),
-            new NoopDialogService(),
+            new NoopUiRenderer(),
+            new NoopUiDispatcher(),
             _ => Task.CompletedTask,
             () => Task.CompletedTask);
 
@@ -82,7 +109,8 @@ public sealed class CreateMaterialViewModelTests
         var vm = new CreateMaterialViewModel(
             app,
             new SynchronousDebouncer(),
-            new NoopDialogService(),
+            new WpfUiRenderer(),
+            new WpfUiDispatcher(),
             _ => Task.CompletedTask,
             () => Task.CompletedTask);
 
@@ -94,6 +122,6 @@ public sealed class CreateMaterialViewModelTests
         vm.CreateCommand.Execute(null);
         await Task.Delay(400);
 
-        Assert.Contains("重复", vm.SpecFieldError);
+        Assert.Equal(UiResources.Get(UiResourceKeys.Error.SpecDuplicate), vm.SpecFieldError);
     }
 }

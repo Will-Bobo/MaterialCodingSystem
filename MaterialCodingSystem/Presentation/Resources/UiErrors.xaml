@@ -1,0 +1,20 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+    <sys:String x:Key="Error.SpecDuplicate">规格号重复（同分类内 spec 已存在）。</sys:String>
+    <sys:String x:Key="Error.CodeConflictRetry">系统繁忙，请稍后重试。</sys:String>
+    <sys:String x:Key="Error.SuffixOverflow">该组替代料后缀已满，无法继续创建。</sys:String>
+    <sys:String x:Key="Error.SuffixSequenceBroken">该组替代料后缀不连续，无法创建新替代料。</sys:String>
+    <sys:String x:Key="Error.NotFound">未找到对应记录。</sys:String>
+    <sys:String x:Key="Error.ValidationError">输入无效，请检查后重试。</sys:String>
+    <sys:String x:Key="Error.InvalidQuery">查询参数无效。</sys:String>
+    <sys:String x:Key="Error.CategoryCodeDuplicate">分类编码已存在。</sys:String>
+    <sys:String x:Key="Error.CategoryNameDuplicate">分类名称已存在。</sys:String>
+    <sys:String x:Key="Error.InternalError">系统内部错误，请稍后重试。</sys:String>
+    <sys:String x:Key="Error.GenericFailure">操作失败，请稍后重试。</sys:String>
+    <sys:String x:Key="Error.CandidateLoadFailed">无法加载候选列表，请稍后重试。</sys:String>
+    <sys:String x:Key="Error.ListCategoriesFailed">无法加载分类列表。</sys:String>
+    <sys:String x:Key="Error.Replacement.ResolveFailed">无法定位物料组。</sys:String>
+    <sys:String x:Key="Error.Replacement.GroupInfoFailed">无法加载组信息。</sys:String>
+    <sys:String x:Key="Error.Replacement.EmbeddedSearchFailed">编码搜索失败。</sys:String>
+</ResourceDictionary>

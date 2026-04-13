@@ -3,7 +3,7 @@ using System.Windows.Media;
 using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Presentation.Scheduling;
-using MaterialCodingSystem.Presentation.Services;
+using MaterialCodingSystem.Presentation.UiSemantics;
 
 namespace MaterialCodingSystem.Presentation.ViewModels;
 
@@ -24,7 +24,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
     private readonly MaterialApplicationService _app;
     private readonly IDebouncer _debouncer;
-    private readonly IDialogService _dialogService;
+    private readonly IUiRenderer _uiRenderer;
+    private readonly IUiDispatcher _uiDispatcher;
     private readonly Func<MaterialItemSpecHit, Task> _navigateToReplacementFromCandidate;
     private readonly Func<Task> _openAddCategoryDialog;
 
@@ -161,13 +162,14 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     private bool _showCandidateCardList;
     public bool ShowCandidateCardList { get => _showCandidateCardList; private set => SetProperty(ref _showCandidateCardList, value); }
 
-    /// <summary>占位：后续接入高相似风险逻辑时置 true。</summary>
+    /// <summary>Placeholder: set true when high-similarity risk logic is wired.</summary>
     public bool ShowHighRiskDuplicateState { get; private set; }
 
-    private string _specInputStateHint = "待输入";
+    private string _specInputStateHint = "";
     public string SpecInputStateHint { get => _specInputStateHint; private set => SetProperty(ref _specInputStateHint, value); }
 
-    public string CandidateSimilarityPlaceholder => "相似度：—（预留）";
+    public string CandidateSimilarityPlaceholder =>
+        UiResources.Get(UiResourceKeys.Info.CreateMaterialCandidateSimilarityPlaceholder);
 
     public RelayCommand CreateCommand { get; }
     public RelayCommand RefreshCategoriesCommand { get; }
@@ -179,7 +181,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     public CreateMaterialViewModel(
         MaterialApplicationService app,
         IDebouncer debouncer,
-        IDialogService dialogService,
+        IUiRenderer uiRenderer,
+        IUiDispatcher uiDispatcher,
         Func<MaterialItemSpecHit, Task> navigateToReplacementFromCandidate,
         Func<Task> openAddCategoryDialog)
     {
@@ -196,7 +199,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
         _app = app;
         _debouncer = debouncer;
-        _dialogService = dialogService;
+        _uiRenderer = uiRenderer;
+        _uiDispatcher = uiDispatcher;
         _navigateToReplacementFromCandidate = navigateToReplacementFromCandidate;
         _openAddCategoryDialog = openAddCategoryDialog;
 
@@ -220,7 +224,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         ForceCreateWithConfirmCommand = new RelayCommand(
             () =>
             {
-                if (!_dialogService.ConfirmCreateDespitePossibleDuplicate())
+                if (!_uiRenderer.ConfirmDuplicateCreate())
                     return;
                 SetDecisionState(CreateDecisionState.ForcedCreate);
             },
@@ -238,11 +242,11 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     private void UpdateSpecInputStateHint()
     {
         if (!string.IsNullOrEmpty(SpecFieldError))
-            SpecInputStateHint = "重复";
+            SpecInputStateHint = UiResources.Get(UiResourceKeys.Info.SpecStateDuplicate);
         else if (string.IsNullOrWhiteSpace(Spec))
-            SpecInputStateHint = "待输入";
+            SpecInputStateHint = UiResources.Get(UiResourceKeys.Info.SpecStatePending);
         else
-            SpecInputStateHint = "正常";
+            SpecInputStateHint = UiResources.Get(UiResourceKeys.Info.SpecStateNormal);
     }
 
     private static bool AreSpecAndDescriptionBothEmpty(string spec, string description) =>
@@ -278,7 +282,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         if (ShowHighRiskDuplicateState && !CandidateLoading)
         {
             CandidateStateIcon = "🚨";
-            CandidateStateMessage = "高相似风险";
+            CandidateStateMessage = UiResources.Get(UiResourceKeys.Info.DecisionHighRiskMessage);
             CandidateStateForeground = BrushRed;
             CandidateStateStripBackground = BrushStateStripBgRisk;
             ShowDecisionInfoBar = count > 0;
@@ -290,7 +294,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         if (CandidateLoading)
         {
             CandidateStateIcon = "⏳";
-            CandidateStateMessage = "正在检索相似物料...";
+            CandidateStateMessage = UiResources.Get(UiResourceKeys.Info.DecisionSearchingMessage);
             CandidateStateForeground = BrushGray;
             CandidateStateStripBackground = BrushStateStripBgIdle;
             ShowDecisionInfoBar = false;
@@ -301,28 +305,28 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         {
             case CreateDecisionState.Idle:
                 CandidateStateIcon = "🔍";
-                CandidateStateMessage = "待检索";
+                CandidateStateMessage = UiResources.Get(UiResourceKeys.Info.DecisionIdleMessage);
                 CandidateStateForeground = BrushGray;
                 CandidateStateStripBackground = BrushStateStripBgIdle;
                 ShowDecisionInfoBar = false;
                 break;
             case CreateDecisionState.Searching:
                 CandidateStateIcon = "⏳";
-                CandidateStateMessage = "正在检索相似物料...";
+                CandidateStateMessage = UiResources.Get(UiResourceKeys.Info.DecisionSearchingMessage);
                 CandidateStateForeground = BrushGray;
                 CandidateStateStripBackground = BrushStateStripBgIdle;
                 ShowDecisionInfoBar = false;
                 break;
             case CreateDecisionState.NoCandidate:
                 CandidateStateIcon = "✔";
-                CandidateStateMessage = "未发现匹配物料";
+                CandidateStateMessage = UiResources.Get(UiResourceKeys.Info.DecisionNoCandidateMessage);
                 CandidateStateForeground = BrushGreen;
                 CandidateStateStripBackground = BrushStateStripBgOk;
                 ShowDecisionInfoBar = false;
                 break;
             case CreateDecisionState.HasCandidate:
                 CandidateStateIcon = "⚠";
-                CandidateStateMessage = "检测到相似物料";
+                CandidateStateMessage = UiResources.Get(UiResourceKeys.Info.DecisionHasCandidateMessage);
                 CandidateStateForeground = BrushOrange;
                 CandidateStateStripBackground = BrushStateStripBgWarn;
                 ShowDecisionInfoBar = count > 0;
@@ -331,7 +335,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
                 break;
             case CreateDecisionState.ForcedCreate:
                 CandidateStateIcon = "✔";
-                CandidateStateMessage = "可创建新主料";
+                CandidateStateMessage = UiResources.Get(UiResourceKeys.Info.DecisionForcedCreateMessage);
                 CandidateStateForeground = BrushGreen;
                 CandidateStateStripBackground = BrushStateStripBgOk;
                 ShowDecisionInfoBar = false;
@@ -380,7 +384,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             CandidateItems.Clear();
             SelectedCandidate = null;
             CandidateLoading = false;
-            CandidateStatus = "请选择分类并输入关键字。";
+            CandidateStatus = UiResources.Get(UiResourceKeys.Info.CandidatePickCategoryAndKeyword);
             TrySetIdleIfBothInputsEmpty();
             CreateCommand.RaiseCanExecuteChanged();
             UpdateDecisionPresentation();
@@ -400,7 +404,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             return;
         }
 
-        CandidateStatus = "搜索中...";
+        CandidateStatus = UiResources.Get(UiResourceKeys.Info.CandidateSearching);
         SetDecisionState(CreateDecisionState.Searching);
         CandidateLoading = true;
         CreateCommand.RaiseCanExecuteChanged();
@@ -427,7 +431,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         {
             CandidateLoading = false;
             CandidateStatus = string.IsNullOrWhiteSpace(categoryCode)
-                ? "请选择分类并输入关键字。"
+                ? UiResources.Get(UiResourceKeys.Info.CandidatePickCategoryAndKeyword)
                 : "";
             TrySetIdleIfBothInputsEmpty();
             CreateCommand.RaiseCanExecuteChanged();
@@ -435,7 +439,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             return;
         }
 
-        CandidateStatus = "搜索中...";
+        CandidateStatus = UiResources.Get(UiResourceKeys.Info.CandidateSearching);
         CandidateLoading = true;
         SetDecisionState(CreateDecisionState.Searching);
         CreateCommand.RaiseCanExecuteChanged();
@@ -452,7 +456,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
             if (!res.IsSuccess)
             {
-                CandidateStatus = $"候选加载失败：{res.Error!.Code}";
+                var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.CreateMaterialCandidates);
+                _uiDispatcher.Apply(plan, this);
                 TrySetIdleIfBothInputsEmpty();
                 CreateCommand.RaiseCanExecuteChanged();
                 return;
@@ -463,13 +468,13 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
             if (res.Data.Items.Count > 0)
             {
-                CandidateStatus = $"检测到可能重复物料（Top20）：共 {res.Data.Items.Count} 条，请抉择";
+                CandidateStatus = UiResources.Format(UiResourceKeys.Info.CandidatePossibleDuplicateTop20, res.Data.Items.Count);
                 SetDecisionState(CreateDecisionState.HasCandidate);
                 SelectedCandidate = CandidateItems[0];
             }
             else
             {
-                CandidateStatus = "未发现匹配物料，可直接创建新主料";
+                CandidateStatus = UiResources.Get(UiResourceKeys.Info.CandidateNoMatchCanCreate);
                 SetDecisionState(CreateDecisionState.NoCandidate);
             }
         }
@@ -493,7 +498,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         var res = await _app.ListCategories();
         if (!res.IsSuccess)
         {
-            Result = $"分类加载失败：{res.Error!.Code} - {res.Error.Message}";
+            var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.CreateMaterialListCategories);
+            _uiDispatcher.Apply(plan, this);
             return;
         }
 
@@ -508,13 +514,12 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
     private async Task CreateAsync()
     {
-        SpecFieldError = "";
-        GlobalError = "";
-        Result = "处理中...";
+        ClearCreateMaterialSubmitFeedback();
+        Result = UiResources.Get(UiResourceKeys.Info.CreateMaterialProcessing);
         var categoryCode = SelectedCategory?.Code?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(categoryCode))
         {
-            Result = "请先选择分类。";
+            Result = UiResources.Get(UiResourceKeys.Hint.SelectCategory);
             return;
         }
 
@@ -528,21 +533,23 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
         if (res.IsSuccess)
         {
-            Result = $"创建成功：{res.Data!.Code}（spec_normalized={res.Data.SpecNormalized}）";
+            Result = UiResources.Format(
+                UiResourceKeys.Info.CreateMaterialCreateSuccess,
+                res.Data!.Code,
+                res.Data.SpecNormalized);
             ScheduleCandidateRefresh();
             return;
         }
 
-        if (res.Error!.Code == ErrorCodes.SPEC_DUPLICATE)
-            SpecFieldError = "规格号重复（同分类内 spec 已存在）。";
-        else if (res.Error.Code == ErrorCodes.CODE_CONFLICT_RETRY)
-        {
-            GlobalError = "系统繁忙，请稍后重试。";
-            _dialogService.ShowWarning("提示", GlobalError);
-        }
-        else
-            Result = $"失败：{res.Error.Code} - {res.Error.Message}";
-
+        var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.CreateMaterialCreate);
+        _uiDispatcher.Apply(plan, this);
         UpdateSpecInputStateHint();
+    }
+
+    private void ClearCreateMaterialSubmitFeedback()
+    {
+        SpecFieldError = "";
+        GlobalError = "";
+        Result = "";
     }
 }

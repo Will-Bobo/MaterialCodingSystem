@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Contracts;
+using MaterialCodingSystem.Presentation.UiSemantics;
 
 namespace MaterialCodingSystem.Presentation.ViewModels;
 
@@ -8,6 +9,8 @@ public sealed class SearchViewModel : ViewModelBase
 {
     private readonly MaterialApplicationService _app;
     private readonly MainViewModel _main;
+    private readonly IUiRenderer _uiRenderer;
+    private readonly IUiDispatcher _uiDispatcher;
 
     private string _codeKeyword = "";
     public string CodeKeyword { get => _codeKeyword; set => SetProperty(ref _codeKeyword, value); }
@@ -47,10 +50,12 @@ public sealed class SearchViewModel : ViewModelBase
     public RelayCommand<MaterialItemSummary> AddCodeHitAsReplacementCommand { get; }
     public RelayCommand RefreshCategoriesCommand { get; }
 
-    public SearchViewModel(MaterialApplicationService app, MainViewModel main)
+    public SearchViewModel(MaterialApplicationService app, MainViewModel main, IUiRenderer uiRenderer, IUiDispatcher uiDispatcher)
     {
         _app = app;
         _main = main;
+        _uiRenderer = uiRenderer;
+        _uiDispatcher = uiDispatcher;
         SearchByCodeCommand = new RelayCommand(async () => await SearchByCodeAsync());
         SearchBySpecCommand = new RelayCommand(async () => await SearchBySpecAsync());
         AddSelectedAsReplacementCommand = new RelayCommand(async () => await AddSelectedAsReplacementAsync());
@@ -66,7 +71,8 @@ public sealed class SearchViewModel : ViewModelBase
         var res = await _app.ListCategories();
         if (!res.IsSuccess)
         {
-            Message = $"分类加载失败：{res.Error!.Code} - {res.Error.Message}";
+            var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.SearchListCategories);
+            _uiDispatcher.Apply(plan, this);
             return;
         }
 
@@ -82,7 +88,7 @@ public sealed class SearchViewModel : ViewModelBase
 
     private async Task SearchByCodeAsync()
     {
-        Message = "搜索中...";
+        Message = UiResources.Get(UiResourceKeys.Info.SearchSearchingCode);
         CodeResults.Clear();
 
         var res = await _app.SearchByCode(new SearchQuery(
@@ -96,24 +102,25 @@ public sealed class SearchViewModel : ViewModelBase
 
         if (!res.IsSuccess)
         {
-            Message = $"失败：{res.Error!.Code} - {res.Error.Message}";
+            var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.SearchByCode);
+            _uiDispatcher.Apply(plan, this);
             return;
         }
 
         foreach (var item in res.Data!.Items) CodeResults.Add(item);
-        Message = $"完成：{res.Data.Items.Count} 条";
+        Message = UiResources.Format(UiResourceKeys.Info.SearchCodeDone, res.Data.Items.Count);
     }
 
     private async Task SearchBySpecAsync()
     {
-        Message = "搜索中...";
+        Message = UiResources.Get(UiResourceKeys.Info.SearchSearchingSpec);
         SpecResults.Clear();
         SelectedSpecResult = null;
 
         var categoryCode = SelectedCategory?.Code?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(categoryCode))
         {
-            Message = "请先选择分类。";
+            Message = UiResources.Get(UiResourceKeys.Hint.SelectCategory);
             return;
         }
 
@@ -128,23 +135,23 @@ public sealed class SearchViewModel : ViewModelBase
 
         if (!res.IsSuccess)
         {
-            Message = $"失败：{res.Error!.Code} - {res.Error.Message}";
+            var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.SearchBySpec);
+            _uiDispatcher.Apply(plan, this);
             return;
         }
 
         foreach (var item in res.Data!.Items) SpecResults.Add(item);
-        Message = $"完成：{res.Data.Items.Count} 条（Top20）";
+        Message = UiResources.Format(UiResourceKeys.Info.SearchSpecDone, res.Data.Items.Count);
     }
 
     private async Task AddSelectedAsReplacementAsync()
     {
         if (SelectedSpecResult is null)
         {
-            Message = "请先在 Top20 结果中选择一条。";
+            Message = UiResources.Get(UiResourceKeys.Info.SearchSelectSpecRowFirst);
             return;
         }
 
-        // 只负责“跳转与带参”，不在 UI 里做任何业务推断
         await AddAsReplacementAsync(SelectedSpecResult.Code);
     }
 
@@ -152,11 +159,10 @@ public sealed class SearchViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(code))
         {
-            Message = "缺少编码，无法跳转。";
+            Message = UiResources.Get(UiResourceKeys.Info.SearchMissingCodeForJump);
             return;
         }
 
         await _main.NavigateToReplacementFromExistingCodeAsync(code);
     }
 }
-

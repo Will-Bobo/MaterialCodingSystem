@@ -1,14 +1,15 @@
 using System.Collections.ObjectModel;
 using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Contracts;
-using MaterialCodingSystem.Presentation.Services;
+using MaterialCodingSystem.Presentation.UiSemantics;
 
 namespace MaterialCodingSystem.Presentation.ViewModels;
 
 public sealed class CreateReplacementViewModel : ViewModelBase
 {
     private readonly MaterialApplicationService _app;
-    private readonly IDialogService _dialogService;
+    private readonly IUiRenderer _uiRenderer;
+    private readonly IUiDispatcher _uiDispatcher;
 
     private string _existingItemCode = "";
     public string ExistingItemCode { get => _existingItemCode; set => SetProperty(ref _existingItemCode, value); }
@@ -74,10 +75,11 @@ public sealed class CreateReplacementViewModel : ViewModelBase
     public RelayCommand EmbeddedCodeSearchCommand { get; }
     public RelayCommand<MaterialItemSummary> PickEmbeddedCodeHitCommand { get; }
 
-    public CreateReplacementViewModel(MaterialApplicationService app, IDialogService dialogService)
+    public CreateReplacementViewModel(MaterialApplicationService app, IUiRenderer uiRenderer, IUiDispatcher uiDispatcher)
     {
         _app = app;
-        _dialogService = dialogService;
+        _uiRenderer = uiRenderer;
+        _uiDispatcher = uiDispatcher;
         CreateCommand = new RelayCommand(async () => await CreateAsync(), () => GroupId > 0);
         ResolveGroupCommand = new RelayCommand(async () => await ResolveGroupAndReportAsync());
         LoadGroupInfoCommand = new RelayCommand(async () => await LoadGroupInfoCoreAsync());
@@ -92,16 +94,17 @@ public sealed class CreateReplacementViewModel : ViewModelBase
 
     public async Task ResolveGroupAndReportAsync()
     {
-        Result = "处理中...";
+        Result = UiResources.Get(UiResourceKeys.Info.ReplacementProcessing);
         var res = await _app.ResolveGroupIdByItemCode(ExistingItemCode);
         if (!res.IsSuccess)
         {
-            Result = $"定位失败：{res.Error!.Code} - {res.Error.Message}";
+            var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.CreateReplacementResolveGroup);
+            _uiDispatcher.Apply(plan, this);
             return;
         }
 
         GroupId = res.Data;
-        Result = $"已定位：GroupId={GroupId}";
+        Result = UiResources.Format(UiResourceKeys.Info.ReplacementResolvedGroup, GroupId);
         await LoadGroupInfoCoreAsync();
     }
 
@@ -112,7 +115,7 @@ public sealed class CreateReplacementViewModel : ViewModelBase
 
     private async Task LoadGroupInfoCoreAsync()
     {
-        GroupInfo = "加载组信息中...";
+        GroupInfo = UiResources.Get(UiResourceKeys.Info.ReplacementLoadingGroupInfo);
         GroupCodeDisplay = "";
         ExistingSuffixDisplay = "";
         NextSuffixDisplay = "";
@@ -120,24 +123,30 @@ public sealed class CreateReplacementViewModel : ViewModelBase
         var res = await _app.GetGroupInfo(GroupId);
         if (!res.IsSuccess)
         {
-            GroupInfo = $"组信息失败：{res.Error!.Code} - {res.Error.Message}";
+            var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.CreateReplacementGroupInfo);
+            _uiDispatcher.Apply(plan, this);
             return;
         }
 
         var d = res.Data!;
-        GroupInfo = $"category={d.CategoryCode} serial={d.SerialNo} 已用suffix=[{d.ExistingSuffixes}] 下一个={d.NextSuffix}";
-        GroupCodeDisplay = $"Group: {d.CategoryCode}{d.SerialNo:D7}";
+        GroupInfo = UiResources.Format(
+            UiResourceKeys.Info.ReplacementGroupInfoSummary,
+            d.CategoryCode,
+            d.SerialNo,
+            d.ExistingSuffixes,
+            d.NextSuffix);
+        GroupCodeDisplay = UiResources.Format(UiResourceKeys.Info.ReplacementGroupCodeDisplay, d.CategoryCode, d.SerialNo);
         var suffixParts = d.ExistingSuffixes.OrderBy(c => c).Select(c => c.ToString()).ToArray();
         ExistingSuffixDisplay = suffixParts.Length == 0
-            ? "已有替代料: （无）"
-            : $"已有替代料: {string.Join(" / ", suffixParts)}";
-        NextSuffixDisplay = $"将创建: {d.NextSuffix}";
-        ReplacementCreateHint = $"该物料将作为该组的替代料（suffix = {d.NextSuffix}）";
+            ? UiResources.Get(UiResourceKeys.Info.ReplacementExistingSuffixNone)
+            : UiResources.Format(UiResourceKeys.Info.ReplacementExistingSuffixList, string.Join(" / ", suffixParts));
+        NextSuffixDisplay = UiResources.Format(UiResourceKeys.Info.ReplacementNextSuffixDisplay, d.NextSuffix);
+        ReplacementCreateHint = UiResources.Format(UiResourceKeys.Info.ReplacementCreateHint, d.NextSuffix);
     }
 
     private async Task EmbeddedSearchByCodeAsync()
     {
-        CodeSearchStatus = "搜索中...";
+        CodeSearchStatus = UiResources.Get(UiResourceKeys.Info.ReplacementEmbeddedSearchSearching);
         EmbeddedCodeResults.Clear();
         CodeSearchLoading = true;
         try
@@ -152,14 +161,17 @@ public sealed class CreateReplacementViewModel : ViewModelBase
 
             if (!res.IsSuccess)
             {
-                CodeSearchStatus = $"失败：{res.Error!.Code}";
+                var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.CreateReplacementEmbeddedSearch);
+                _uiDispatcher.Apply(plan, this);
                 return;
             }
 
             foreach (var x in res.Data!.Items)
                 EmbeddedCodeResults.Add(x);
 
-            CodeSearchStatus = res.Data.Items.Count == 0 ? "未找到匹配的编码。" : $"共 {res.Data.Items.Count} 条。";
+            CodeSearchStatus = res.Data.Items.Count == 0
+                ? UiResources.Get(UiResourceKeys.Info.ReplacementEmbeddedSearchEmpty)
+                : UiResources.Format(UiResourceKeys.Info.ReplacementEmbeddedSearchCount, res.Data.Items.Count);
         }
         finally
         {
@@ -170,7 +182,7 @@ public sealed class CreateReplacementViewModel : ViewModelBase
     private async Task CreateAsync()
     {
         SpecFieldError = "";
-        Result = "处理中...";
+        Result = UiResources.Get(UiResourceKeys.Info.ReplacementProcessing);
         var res = await _app.CreateReplacement(new CreateReplacementRequest(
             GroupId: GroupId,
             Spec: Spec,
@@ -181,18 +193,12 @@ public sealed class CreateReplacementViewModel : ViewModelBase
 
         if (res.IsSuccess)
         {
-            Result = $"创建成功：{res.Data!.Code}（suffix={res.Data.Suffix}）";
+            Result = UiResources.Format(UiResourceKeys.Info.ReplacementCreateSuccess, res.Data!.Code, res.Data.Suffix);
             await LoadGroupInfoCoreAsync();
             return;
         }
 
-        if (res.Error!.Code == ErrorCodes.SPEC_DUPLICATE)
-            SpecFieldError = "规格号重复。";
-        else if (res.Error.Code == ErrorCodes.SUFFIX_OVERFLOW || res.Error.Code == ErrorCodes.SUFFIX_SEQUENCE_BROKEN)
-            _dialogService.ShowWarning("替代料", res.Error.Message);
-        else if (res.Error.Code == ErrorCodes.CODE_CONFLICT_RETRY)
-            _dialogService.ShowWarning("提示", "系统繁忙，请稍后重试。");
-        else
-            Result = $"失败：{res.Error.Code} - {res.Error.Message}";
+        var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.CreateReplacementCreate);
+        _uiDispatcher.Apply(plan, this);
     }
 }

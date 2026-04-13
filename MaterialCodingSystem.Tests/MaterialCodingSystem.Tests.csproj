@@ -24,4 +24,9 @@
     <ProjectReference Include="..\MaterialCodingSystem\MaterialCodingSystem.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\MaterialCodingSystem\Presentation\Resources\UiErrors.xaml" Link="UiErrors.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\MaterialCodingSystem\Presentation\Resources\UiStrings.xaml" Link="UiStrings.xaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
