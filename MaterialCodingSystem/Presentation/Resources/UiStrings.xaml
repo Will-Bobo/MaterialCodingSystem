@@ -5,6 +5,8 @@
     <sys:String x:Key="Dialog.Title.Confirm">确认</sys:String>
     <sys:String x:Key="Confirm.DuplicateTitle">确认</sys:String>
     <sys:String x:Key="Confirm.DuplicateBody">检测到可能重复物料，仍然要创建新主料吗？&#x0a;&#x0a;「是」= 确认创建&#x0a;「否」= 返回查看候选</sys:String>
+    <sys:String x:Key="Confirm.DeprecateTitle">确认</sys:String>
+    <sys:String x:Key="Confirm.DeprecateBody">确认要废弃该编码吗？&#x0a;&#x0a;编码：{0}</sys:String>
 
     <sys:String x:Key="Info.CreateMaterial.Processing">处理中...</sys:String>
     <sys:String x:Key="Hint.SelectCategory">请先选择分类。</sys:String>
@@ -30,12 +32,12 @@
     <sys:String x:Key="Info.Replacement.Processing">处理中...</sys:String>
     <sys:String x:Key="Info.Replacement.LoadingGroupInfo">加载组信息中...</sys:String>
     <sys:String x:Key="Info.Replacement.GroupInfoSummary">category={0} serial={1} 已用suffix=[{2}] 下一个={3}</sys:String>
-    <sys:String x:Key="Info.Replacement.GroupCodeDisplay">Group: {0}{1:D7}</sys:String>
+    <sys:String x:Key="Info.Replacement.GroupCodeDisplay">主档：{0}{1:D7}</sys:String>
     <sys:String x:Key="Info.Replacement.ExistingSuffixNone">已有替代料: （无）</sys:String>
     <sys:String x:Key="Info.Replacement.ExistingSuffixList">已有替代料: {0}</sys:String>
     <sys:String x:Key="Info.Replacement.NextSuffixDisplay">将创建: {0}</sys:String>
     <sys:String x:Key="Info.Replacement.CreateHint">该物料将作为该组的替代料（suffix = {0}）</sys:String>
-    <sys:String x:Key="Info.Replacement.ResolvedGroup">已定位：GroupId={0}</sys:String>
+    <sys:String x:Key="Info.Replacement.ResolvedGroup">已定位：{0}</sys:String>
     <sys:String x:Key="Info.Replacement.CreateSuccess">创建成功：{0}（suffix={1}）</sys:String>
     <sys:String x:Key="Info.Replacement.EmbeddedSearchSearching">搜索中...</sys:String>
     <sys:String x:Key="Info.Replacement.EmbeddedSearchEmpty">未找到匹配的编码。</sys:String>

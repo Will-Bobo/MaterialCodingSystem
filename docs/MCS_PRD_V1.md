@@ -1,4 +1,6 @@
-# 物料编码系统 PRD（V1.2 修正版）
+# 物料编码系统 PRD（V1.3 规则冻结稿）
+
+> **版本说明（V1.3）**：本章档与自动化校验规格 `MaterialCodingSystem.Validation/specs/PRD_V1.yaml` 中 `meta.prd_freeze` **对齐**。若正文其他小节与「V1.3 冻结口径」冲突，**以冻结口径为准**（实现与测试应随后续迭代收敛到冻结语义）。
 
 ## 一、项目背景
 
@@ -90,7 +92,7 @@ ZDA0000001A / ZDA0000001B / ZDA0000001C
   * `ASCII(maxSuffix) - ASCII(minSuffix) + 1 == count`（`count` 为该组内 Item 条数）
   * 若不满足 → 判定为 **suffix 不连续**，**禁止创建**新替代料
 * 超过 Z（26个）禁止创建
-* suffix 生成必须在事务中完成；如遇并发冲突（唯一约束冲突）需重试
+* suffix 生成必须在事务中完成；如遇并发冲突（`UNIQUE(group_id, suffix)`）须 **事务级重试**（默认最多 3 次），耗尽 → **`SUFFIX_ALLOCATION_FAILED`**（见 **10.2 / 15.5 / 15.6**）
 
 ---
 
@@ -187,12 +189,21 @@ V1.2 仍采用三表模型：`Category`（分类）/ `MaterialGroup`（主档）
 | group_id | int | 所属主档（对应 `MaterialGroup.id`） |
 | code | string | 完整编码（唯一） |
 | suffix | char | A-Z |
-| name | string | 名称 |
+| name | string | **物料展示名称（快照）**：**不由用户输入**；创建时在与插入**同一事务、同一连接**内读取 `category.name` 并写入 `material_item.name`；**不随分类改名而变更**（历史行保持创建时快照） |
 | description | string | **规格描述**：用户输入的完整规格字符串（不做结构化解析）；用于展示与搜索 |
 | spec | string | **规格号（供应商型号）**：用户识别物料的核心字段，原样保存；示例：`CL10A106KP8NNNC` |
 | spec_normalized | string | **基于 description 生成的搜索辅助字段**（V1 仅转大写/去首尾空格/多空格压一）；不参与唯一性约束 |
 | brand | string | 品牌 |
 | is_structured | int | 是否已结构化（0=否 1=是） |
+
+#### 6.3.1 术语区分（必须）
+
+- **`material_item.name`**：定义为 **“历史名称（快照）”**。创建时从 `category.name` 读取并写入；仅用于历史追溯与一致性，不保证与当前分类名称一致。
+- **`display_name`（逻辑概念，不新增字段）**：定义为 **“当前分类名称”**（`category.name`），用于 **UI 展示与导出**。
+
+强制规则（必须/禁止）：
+
+- **UI 展示与导出场景，必须使用 `category.name`（display_name），不得使用 `material_item.name` 作为展示名称。**
 
 说明：
 
@@ -235,7 +246,7 @@ MaterialItem（物料实例 A-Z）
 * **spec（规格号）视为供应商定义的唯一样号标识**（型号 Part Number）。
 * 在电子元件领域中，**同一型号通常不会被多个品牌复用**；同时 **brand** 字段存在命名不规范（大小写、别名、多语言等）问题。
 * 因此系统唯一性设计为 **`UNIQUE(category_code, spec)`**，并明确：
-  * **同一 spec 在系统中只允许存在一条记录**（`status=1` 或 `status=0` 均占用该约束，见废弃规则）；
+  * **同一 spec 在“正常状态（status=1）数据集”中只允许存在一条记录**（已废弃 `status=0` 不参与 spec 唯一性，占用可被释放，见 **10.1**）；
   * **即使录入时 brand 不同，只要 spec 相同，也视为同一物料**（不允许另建一条）；
   * **brand 不参与唯一性约束**。
 
@@ -244,8 +255,8 @@ MaterialItem（物料实例 A-Z）
 * 物料编码体系唯一性仍以 `code` 为主唯一标识（等价 `category_code + serial_no + suffix`）
 * **spec = 规格号（供应商型号）**（同分类不允许重复）
 * **spec_normalized = 基于 description 生成的搜索辅助字符串**（不参与唯一性约束）
-* `UNIQUE(category_code, spec)` 冲突 → 必须阻止创建（错误码：`SPEC_DUPLICATE`）
-* 由于数据不可物理删除：废弃数据仍占用唯一性（见“核心约束”）
+* `UNIQUE(category_code, spec)` 冲突（针对 `status=1`）→ 必须阻止创建（错误码：`SPEC_DUPLICATE`）
+* 注意：spec 唯一性与编码/后缀唯一性不同；编码与后缀仍要求“废弃不释放”（见 **10.1**）
 
 **category_code 冗余一致性（必须）**
 
@@ -460,29 +471,87 @@ LIMIT 20;
 
 ### 7.4 Excel 导出
 
-规则：
+**V1.3 冻结规则（双工作簿结构）**
 
-* 每个分类一个 Sheet
-* 字段：
+1. **Sheet1（全量）**
 
-```
-编码 | 名称 | 规格描述 | 规格号 | 品牌
-```
+   * **名称**：`全量`（或产品化等价命名）
+   * **范围**：库内**全部**物料行（**含** `status = 0` 已废弃）
+   * **字段（与分类 Sheet 完全一致，列顺序固定）**：
 
-排序规则（必须修正）：
+     1) 编码（`code`）  
+     2) 分类编码（`category_code`）  
+     3) 名称（`name`，**导出视图名称**，见下方“名称语义说明”）  
+     4) 规格号（`spec`）  
+     5) 规格描述（`description`）  
+     6) 品牌（`brand`）  
+     7) 状态（`status`：`1=正常`，`0=已废弃`；**必选列，不可省略**）
+
+   * **排序（必须）**：按结构化键排序，**禁止仅按完整 `code` 字符串排序**；其中 `base_code（逻辑）= material_group.serial_no`，`suffix` 按字母顺序（A < B < ... < Z）。  
+     **推荐排序（建议强制写入）**：正常物料优先展示，已废弃在后：
 
 ```text
-ORDER BY category_code, serial_no, suffix
+ORDER BY mi.status DESC, mg.category_code, mg.serial_no, mi.suffix
 ```
 
-导出SQL（必须给出完整SQL，不可省略）：
+补充（稳定排序，必须）：**当排序键相同时，以 `code` 作为最终稳定排序键**。
+
+2. **分类 Sheet（仅有效数据）**
+
+   * **范围**：**每个分类一个 Sheet**，包含该分类下**全部**物料（**含** `status = 0` 已废弃）；通过 `status` 列区分状态
+   * **字段**：与 Sheet1 **完全相同**（列顺序固定；`status` 为必选列）
+   * **排序**：与 Sheet1 保持一致（推荐同样以 status 优先）：
+
+```text
+ORDER BY mi.status DESC, mg.category_code, mg.serial_no, mi.suffix
+```
+
+补充（稳定排序，必须）：**当排序键相同时，以 `code` 作为最终稳定排序键**。
+
+#### 7.4.1 名称语义说明（关键，避免歧义）
+
+1. **导出“名称”（本节字段 `name`）来源**：导出中的“名称”字段使用**当前分类名称**（`category.name` / `display_name`），**不使用** `material_item.name`（历史快照）。
+2. **快照字段语义**：`material_item.name` 为创建时的分类名称快照，用于系统内历史数据一致性与可追溯性；后续分类改名不回写历史物料行。
+3. **导出名称语义**：导出名称用于反映**当前分类体系**，与历史快照名称语义不同。
+4. 消歧声明：**导出数据为当前分类视图，不保证与历史快照名称一致。**
+
+**逻辑 base 说明（与排序键对齐）**
+
+* 文档与规格中的 **base_code（逻辑）** **不单独落库**；在排序/导出语境下 **等价于 `material_group.serial_no`**（与 `category_code` 共同定位组；完整 `code` 仍由编码规则拼接生成）。
+
+**导出 SQL 示例（Sheet1 全量，必须可对照实现）**
 
 ```sql
-SELECT mi.code, mi.name, mi.description, mi.spec, mi.brand
+SELECT
+  mi.code,
+  mg.category_code,
+  c.name AS name,
+  mi.spec,
+  mi.description,
+  mi.brand,
+  mi.status
 FROM material_item mi
 JOIN material_group mg ON mi.group_id = mg.id
-WHERE mi.status = 1
-ORDER BY mg.category_code, mg.serial_no, mi.suffix
+JOIN category c ON mg.category_id = c.id
+ORDER BY mi.status DESC, mg.category_code, mg.serial_no, mi.suffix, mi.code;
+```
+
+**导出 SQL 示例（分类 Sheet：仅有效，必须可对照实现）**
+
+```sql
+SELECT
+  mi.code,
+  mg.category_code,
+  c.name AS name,
+  mi.spec,
+  mi.description,
+  mi.brand,
+  mi.status
+FROM material_item mi
+JOIN material_group mg ON mi.group_id = mg.id
+JOIN category c ON mg.category_id = c.id
+WHERE mg.category_code = :category_code
+ORDER BY mi.status DESC, mg.category_code, mg.serial_no, mi.suffix, mi.code;
 ```
 
 ---
@@ -534,9 +603,9 @@ UI 结构（示意）：
 规格描述(desc)  [            ]  （必填）
 ----------------------------------
 【候选物料列表（实时，LIKE，Top20）】
-编码 | 规格号 | 规格描述 | 名称 | 品牌
+编码 | 规格号 | 规格描述 | 名称 | 品牌 | 状态
 ----------------------------------
-名称（展示名）
+名称（只读：当前所选分类的 category.name；提交后写入 item.name 快照，不随分类改名回写）
 品牌
 ----------------------------------
 [提交]
@@ -601,6 +670,18 @@ UI 结构（示意）：
 
 ### 9.2 替代料添加页面
 
+**V1.3 冻结：创建入口为 ByCode（基准物料编码）**
+
+* **输入**：`base_material_code`（用户从搜索结果选中一行即等价于提供基准编码）
+* **行为**：系统根据基准编码解析所属组并完成 **单事务** 编排：`组解析 → suffix 计算 → 插入新物料`；**Presentation 层禁止暴露 `group` / `groupId` 等内部标识**（用户向文案不得出现 *group*）
+* **基准约束**：基准物料必须 `status = 1`；若基准已废弃（`status = 0`）→ 返回 **`ANCHOR_ITEM_DEPRECATED`**，禁止创建
+* **废弃级联**：对某一物料执行废弃 **不级联** 废弃同组其他替代料（见 **10.3** 补充）
+
+**UI 状态机（冻结）**
+
+* **基准加载态**（四态，仅描述基准解析与上下文展示）：`未选择 | 加载中 | 成功 | 失败`
+* **提交态**（独立）：例如 `提交中 / 成功 / 失败`，**禁止**与基准加载四态混用同一枚举或同一套 UI 绑定
+
 UI 结构（示意）：
 
 ```
@@ -608,24 +689,24 @@ UI 结构（示意）：
 编码搜索框 [          ]
 ----------------------------------
 候选列表：
-编码 | 名称 | 规格号
+编码 | 名称 | 规格号 | 状态
 ----------------------------------
-选中物料后（必须展示）：
-Group编码（如 ZDA0000001）
+选中物料后（必须展示，用户向）：
+主档展示标识（如 ZDA0000001，不含内部 id）
 当前已有 suffix 列表（A/B/C）
 明确提示：
 将创建下一个替代料：D
 ----------------------------------
-填写替代料信息
+填写替代料信息（名称只读规则同 9.1：来自分类名快照逻辑在服务端完成）
 ----------------------------------
 ```
 
 交互逻辑：
 
 1. 输入编码 → 实时搜索（前缀/模糊）
-2. 选择主料/组内任一物料 → 自动定位 Group
-3. 展示 Group 信息与替代料预测信息（见上方“必须展示”）
-4. 创建替代料（B-Z）
+2. 选择主料/组内任一 **正常** 物料 → 自动加载基准上下文（进入基准加载状态机）
+3. 展示主档/后缀预测信息（见上方“必须展示”）
+4. 创建替代料（B-Z）：调用 **`CreateReplacementByCode`（命名示意）** 或等价 Application API，保证与 **15.4** 事务口径一致
 
 状态设计（必须补齐）：
 
@@ -656,26 +737,33 @@ Group编码（如 ZDA0000001）
 
 * 编码唯一
 * 物料唯一性以编码体系为准：`code` 唯一（等价于 `category_code + serial_no + suffix`）
+* **唯一性范围（关键规则，必须写死）**：
+  * `UNIQUE(code)`：**全局唯一**，且**包含已废弃**（`status=0` 仍占用编码，不释放）
+  * `UNIQUE(group_id, suffix)`：**同组唯一**，且**包含已废弃**（`status=0` 仍占用 suffix 槽位，不释放）
+  * 说明：**包含已废弃数据（status=0 不释放），以保证编码体系的历史一致性与可追溯性**
 * **规格号唯一性（分类内）**：
 
   * **spec = 规格号（供应商型号）**，为用户识别物料的核心字段
-  * 数据库唯一约束：**`UNIQUE(category_code, spec)`**
+  * **唯一性口径（必须修正）**：`UNIQUE(category_code, spec)` **仅约束 `status = 1（正常）` 数据**（已废弃 `status = 0` 不参与 spec 唯一性）
   * `spec_normalized` **不参与**唯一性约束（仅搜索辅助）
-  * **spec 相同** → 禁止创建（`SPEC_DUPLICATE`）
+  * **spec 相同（在 status=1 数据集中）** → 禁止创建（`SPEC_DUPLICATE`）
   * **spec_normalized 相同但 spec 不同** → **仅提示**，不阻止创建
 
 **规格唯一性补充说明（与 6.4.2 一致）**
 
-* spec 视为供应商唯一样号；**`UNIQUE(category_code, spec)`** 表示同一分类下 **同一 spec 仅允许一条记录**；**brand 不参与唯一性**；不同品牌不得通过不同 `brand` 绕过同一 spec 的唯一性。
+* spec 视为供应商唯一样号；在 **正常状态（status=1）数据集**中，同一分类下 **同一 spec 仅允许一条记录**；**brand 不参与唯一性**；不同品牌不得通过不同 `brand` 绕过同一 spec 的唯一性。
 
 废弃数据与唯一性（关键决策，必须定稿）：
 
-* 方案A（采用）：**废弃数据仍占用唯一性（不允许重复创建）**
+* 方案（采用，V1.3 裁决）：**废弃数据不参与 spec 唯一性（允许复用 spec）**
 
 唯一性范围说明：
 
-* 因为“数据不可物理删除”，即使 `status = 0（废弃）`，其 `spec` 仍然占用唯一性（同分类 spec 禁止重复）
-* 录入错误的处理方式是：废弃（status=0）保留追溯，而不是物理删除后重建
+* 已废弃数据（`status=0`）**不参与** `spec` 唯一性约束
+* 废弃后允许在同一 `category_code` 下重新创建相同 `spec` 的**新物料**（`status=1`）
+* 废弃操作视为“**释放 spec 占用**”
+* 产品语义（必须）：**废弃用于修正错误录入；废弃后的规格允许重新创建，以提升业务可用性。**
+* 注意：以上变更**仅作用于 spec 唯一性**；`code` 与 `(group_id, suffix)` 唯一性仍为“废弃不释放”，不得改变
 
 **spec_normalized（V1）**
 
@@ -718,8 +806,27 @@ Group编码（如 ZDA0000001）
 * A-Z 连续
 * 最大 26 个
 * **连续性判定（必须）**：同一 `group_id` 下须满足 `minSuffix = 'A'` 且 `ASCII(maxSuffix) - ASCII(minSuffix) + 1 == count`；否则视为 suffix 不连续，**禁止创建**新替代料
-* 超过 Z 禁止创建
-* suffix 生成必须在事务中完成；并发冲突需重试
+* 超过 Z 禁止创建（**`SUFFIX_OVERFLOW`**）
+* **创建模式（V1.3）**：以 **基准物料编码** 驱动（`CreateReplacementByCode`）；基准物料 **`status` 必须为 1**，否则 **`ANCHOR_ITEM_DEPRECATED`**
+* suffix 生成必须在**单事务**中完成；依赖 **`UNIQUE(group_id, suffix)`** 保证唯一；遇并发冲突 **事务级重试**，**最大 3 次**；若仍失败 → **`SUFFIX_ALLOCATION_FAILED`**（与全局 `code` 冲突重试失败 **`CODE_CONFLICT_RETRY`** 区分）
+* **替代关系不级联废弃**：废弃某一物料 **不** 自动废弃同组其他物料
+
+#### 10.2.1 替代料（ByCode）校验顺序（必须写死顺序）
+
+`CreateReplacementByCode(base_material_code, ...)` 的校验顺序必须固定为（**顺序不可变更**）：
+
+1. **base_material_code 是否存在**
+2. **base item.status == 1**（否则 → **`ANCHOR_ITEM_DEPRECATED`**）
+3. **category 是否存在**（`category_code` 不存在或已失效 → **`CATEGORY_NOT_FOUND`**；该校验**优先级高于 suffix 分配**）
+4. （可选）规格合法性（格式/必填等）
+5. **全部业务校验通过后**，才允许进入：**suffix 分配**
+
+明确禁止：
+
+* **在 suffix 分配前执行任何插入尝试**
+* **在 suffix 分配前开启重试逻辑**
+
+一句话冻结：**所有业务校验必须在 suffix 分配前完成。**
 
 ---
 
@@ -734,6 +841,13 @@ Group编码（如 ZDA0000001）
 
 * 禁止物理删除（仅允许把 `status` 置为 0）
 * 默认搜索/检索/导出只返回 `status = 1` 的数据（除非显式选择“包含废弃”）
+* **展示一致性（冻结）**：UI 列表、搜索结果、导出 Sheet 中 **`status` 语义必须一致**：`1` 展示为 **正常**，`0` 展示为 **已废弃**（同一套映射，禁止各层各写一套文案）
+* **导出一致性**：Sheet1（全量）**含**废弃行；分类 Sheet **仅** `status = 1`；均须带状态列或与 **7.4** 一致
+
+#### 【废弃与替代（V1.3 补充）】
+
+* **不级联**：废弃仅影响当前 `material_item` 行，不级联修改同组其他行
+* **基准限制**：**已废弃物料不得作为新增替代料的基准**（返回 **`ANCHOR_ITEM_DEPRECATED`**）
 
 #### 【错误数据处理规则】
 
@@ -937,6 +1051,12 @@ CreateMaterialItemA(input)
 
 处理流程（必须严格按此实现）：
 
+校验顺序（必须写死顺序）：
+
+1. **category 是否存在**（`category_code` 不存在或已失效 → **`CATEGORY_NOT_FOUND`**；不得进入事务内创建流程）
+2. （可选）spec/description/name 等入参合法性（必填/格式等）
+3. 通过后才允许进入事务与后续插入（见下方“处理流程”）
+
 1. 调用 `SpecNormalizationService.Normalize(description)` 生成 `spec_normalized`（V1 仅三步规则）
 2. 开启事务（必须）
 3. 执行 INSERT（不允许用相似度绕过唯一性）
@@ -980,6 +1100,14 @@ CreateMaterialItemReplacement(group_id, input)
 * brand
 
 处理流程（必须严格按此实现）：
+
+校验顺序（ByCode 推荐入口，必须写死顺序；不得混写主物料校验）：
+
+1. **base_material_code 是否存在**
+2. **base item.status == 1**（否则 → **`ANCHOR_ITEM_DEPRECATED`**）
+3. **category 是否存在**（`category_code` 不存在或已失效 → **`CATEGORY_NOT_FOUND`**；该校验**优先级高于 suffix 分配**）
+4. （可选）规格合法性（格式/必填等）
+5. **全部业务校验通过后**，才允许进入：suffix 分配与插入（事务内）
 
 1. 开启事务（必须）
 2. 查询当前最大 suffix（同 group）：
@@ -1132,8 +1260,8 @@ LIMIT 20;
 
 必须明确：
 
-* `CreateMaterialItemA`：单事务（包含流水号生成、Group插入、Item插入）
-* `CreateMaterialItemReplacement`：单事务（包含suffix计算与插入）
+* `CreateMaterialItemA`：单事务（包含流水号生成、Group插入、Item插入）；**`name` 在与插入同一事务、同一连接内**从 `category` 读取并写入 `material_item.name` 快照
+* `CreateMaterialItemReplacement` / **`CreateReplacementByCode`（V1.3 推荐入口）**：单事务（包含组解析、suffix 计算与插入）；须满足 **10.2** 并发与错误码口径
 * 搜索：不使用事务
 
 ---
@@ -1148,20 +1276,26 @@ LIMIT 20;
 必须包含（**业务错误码**）：
 
 * `SPEC_DUPLICATE`：规格号重复（同分类下 `spec` 冲突，触发 `UNIQUE(category_code, spec)`）
-* `SUFFIX_OVERFLOW`：超过 Z（26个）禁止创建
+* `CATEGORY_NOT_FOUND`：`category_code` 不存在或已失效（创建主物料时 category_code 无效；CreateReplacementByCode 过程中解析分类失败；**优先级高于 suffix 分配，必须先校验**）
+* `SUFFIX_OVERFLOW`：**A-Z 后缀耗尽**（逻辑上无法再分配下一后缀，非并发重试问题）
+* `SUFFIX_ALLOCATION_FAILED`：**后缀分配失败**（依赖 `UNIQUE(group_id, suffix)` + 事务级重试后仍冲突，**重试次数达到上限**，与全局 `code` 冲突区分）
 * `SUFFIX_SEQUENCE_BROKEN`：**suffix 不连续（存在缺口）**；同一 `group_id` 下不满足 PRD 连续性判定时，**禁止创建替代料**（见 **4.3 / 10.2 / 15.1.2**）
-* `CODE_CONFLICT_RETRY`：编码/唯一约束冲突重试失败（超过3次）
+* `CODE_CONFLICT_RETRY`：**全局编码 `code` 唯一**等冲突，事务级重试仍失败（超过 3 次）；**不用于**替代料 suffix 槽位重试耗尽（该场景使用 `SUFFIX_ALLOCATION_FAILED`）
+* `ANCHOR_ITEM_DEPRECATED`：基准物料已废弃（`status = 0`），禁止以此创建替代料
 
-业务错误码完整列表（最终版，V1.2 收敛后）：
+业务错误码完整列表（**V1.3 冻结**）：
 
 | 错误码 | 触发场景 | 是否阻断创建 | UI建议 |
 |---|---|---:|---|
 | SPEC_DUPLICATE | 同分类 `spec` 完全重复（触发 `UNIQUE(category_code, spec)`） | 是 | spec（规格号）输入框红字提示“规格号重复” |
-| SUFFIX_OVERFLOW | 替代料 suffix 超过 Z | 是 | 弹窗/全局提示“替代料已达上限” |
+| CATEGORY_NOT_FOUND | `category_code` 不存在或已失效（创建主物料 / 替代料 ByCode 分类解析失败） | 是 | 弹窗/全局提示“分类不存在或已失效” |
+| SUFFIX_OVERFLOW | 同组已连续占满 A–Z，无法再分配下一后缀 | 是 | 弹窗/全局提示“替代料已达上限” |
+| SUFFIX_ALLOCATION_FAILED | 同组 suffix 并发分配，事务级重试（默认最多 3 次）仍失败 | 是 | 弹窗/全局提示“后缀分配失败，请重试”（文案可产品化） |
 | SUFFIX_SEQUENCE_BROKEN | 同组 suffix 不连续（存在跳号/缺口），禁止新增替代料 | 是（仅替代料创建） | 弹窗/全局提示“suffix 不连续，禁止创建替代料”（文案可产品化） |
-| CODE_CONFLICT_RETRY | 并发/冲突导致重试超过 3 次 | 是 | 弹窗/全局提示“系统繁忙，请重试” |
+| CODE_CONFLICT_RETRY | 全局 `code` 等唯一约束冲突，重试超过 3 次 | 是 | 弹窗/全局提示“系统繁忙，请重试” |
+| ANCHOR_ITEM_DEPRECATED | 基准物料已废弃仍尝试创建替代料 | 是 | 弹窗/全局提示“基准物料已废弃，无法添加替代料”（文案可产品化） |
 
-**suffix 连续性错误码收敛（必须）**：凡属于「同组 suffix 不连续、不允许补洞、删除中间 suffix 后形成缺口」等 **同一 PRD 连续性判定** 的情形，Application **仅** 返回 `SUFFIX_SEQUENCE_BROKEN`（与 Domain `SuffixAllocator` 一致）。**不得**再使用或对外承诺下列曾用于校验 YAML/说明的别名：`SUFFIX_GAP_FORBIDDEN`、`SUFFIX_NO_GAP_FILL`、`SUFFIX_NO_REUSE`（上述语义一律并入 `SUFFIX_SEQUENCE_BROKEN`）。黑盒 spec（如 `PRD_V1.yaml`）应 **直接断言 Application 返回码**，**禁止**在 Validation 动作层对 suffix 相关错误做二次映射。与「已满 26 个后缀」相关的上限场景仍单独使用 **`SUFFIX_OVERFLOW`**。
+**suffix 连续性错误码收敛（必须）**：凡属于「同组 suffix 不连续、不允许补洞、删除中间 suffix 后形成缺口」等 **同一 PRD 连续性判定** 的情形，Application **仅** 返回 `SUFFIX_SEQUENCE_BROKEN`（与 Domain `SuffixAllocator` 一致）。**不得**再使用或对外承诺下列曾用于校验 YAML/说明的别名：`SUFFIX_GAP_FORBIDDEN`、`SUFFIX_NO_GAP_FILL`、`SUFFIX_NO_REUSE`（上述语义一律并入 `SUFFIX_SEQUENCE_BROKEN`）。黑盒 spec（如 `PRD_V1.yaml`）应 **直接断言 Application 返回码**，**禁止**在 Validation 动作层对 suffix 相关错误做二次映射。与「已满 26 个后缀」相关的上限场景仍单独使用 **`SUFFIX_OVERFLOW`**；与「并发 suffix 槽位重试耗尽」相关场景使用 **`SUFFIX_ALLOCATION_FAILED`**（见 **15.6**）。
 
 #### 15.5.2 工程错误码附录（非核心业务）
 
@@ -1199,8 +1333,10 @@ LIMIT 20;
 4. 冲突处理：
 
    * 捕获 `UNIQUE` 冲突
-   * 重试（最多3次）
-   * 超过返回 `CODE_CONFLICT_RETRY`
+   * **事务级重试**（回滚后重来；默认 **最多 3 次**）
+   * 超过上限时按场景返回：
+     * **替代料 suffix 槽位**争用（`UNIQUE(group_id, suffix)`）→ **`SUFFIX_ALLOCATION_FAILED`**
+     * **全局 `code` 唯一**等其他约束 → **`CODE_CONFLICT_RETRY`**
 
 适用场景（必须按此实现）：
 
@@ -1209,7 +1345,33 @@ LIMIT 20;
 
 实现要点：
 
-* 重试必须以“事务级重试”为单位（回滚后重新读取最大值并再插入）
+* 重试必须以“事务级重试”为单位（回滚后重新读取快照并再插入）
+* **禁止**将 suffix 重试耗尽与全局编码冲突混用同一错误码（见 **15.5**）
+
+#### 15.6.1 suffix 分配的事务与重试语义（必须新增）
+
+强制规则（必须/禁止）：
+
+1. **单次尝试必须在单事务内完成**：
+   - suffix 计算
+   - 插入 `material_item`
+2. 若发生唯一约束冲突（`UNIQUE(group_id, suffix)`），**允许进行外层重试**（重新开启新事务）。
+3. 重试模型定义（必须按此实现）：
+
+```text
+for retry in N:
+  BEGIN TRANSACTION
+    计算 suffix
+    尝试插入 material_item
+  COMMIT
+  若冲突 → ROLLBACK 并重试
+```
+
+4. 最大重试次数：当前冻结为 **3 次**；超过最大重试次数 → 返回 **`SUFFIX_ALLOCATION_FAILED`**；**不得**无限重试。
+5. 禁止行为：
+   - **不得在一个事务内循环尝试多个 suffix**
+   - **不得绕过唯一约束进行手动分配**
+6. 语义澄清（必须）：**CreateReplacementByCode 的“单事务”指单次分配尝试；在并发冲突场景下，允许通过多次事务重试实现最终成功。**
 
 ## 十六、Repository层设计（数据访问规范）
 

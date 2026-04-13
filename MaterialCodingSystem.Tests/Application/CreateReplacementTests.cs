@@ -50,9 +50,7 @@ public class CreateReplacementTests
             Brand: null
         ));
 
-        Assert.False(res.IsSuccess);
-        Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error!.Code);
-        Assert.Equal("name is required.", res.Error.Message);
+        Assert.True(res.IsSuccess);
     }
 
     [Fact]
@@ -200,7 +198,7 @@ public class CreateReplacementTests
     }
 
     [Fact]
-    public async Task CreateReplacement_WhenSuffixConflict_Exceeds3_ReturnsCodeConflictRetry()
+    public async Task CreateReplacement_WhenSuffixConflict_Exceeds3_ReturnsSuffixAllocationFailed()
     {
         var uow = new CountingUnitOfWork();
         var repo = new FakeMaterialRepository
@@ -223,7 +221,7 @@ public class CreateReplacementTests
         ));
 
         Assert.False(res.IsSuccess);
-        Assert.Equal(ErrorCodes.CODE_CONFLICT_RETRY, res.Error!.Code);
+        Assert.Equal(ErrorCodes.SUFFIX_ALLOCATION_FAILED, res.Error!.Code);
         Assert.Equal(3, uow.Executions);
     }
 }

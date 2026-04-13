@@ -109,6 +109,8 @@ public static class UiResourceKeys
     {
         public const string DuplicateTitle = "Confirm.DuplicateTitle";
         public const string DuplicateBody = "Confirm.DuplicateBody";
+        public const string DeprecateTitle = "Confirm.DeprecateTitle";
+        public const string DeprecateBody = "Confirm.DeprecateBody";
     }
 
     public static class Info

@@ -11,42 +11,77 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
         ct.ThrowIfCancellationRequested();
         using var wb = new XLWorkbook();
 
-        foreach (var group in rows.GroupBy(r => r.CategoryCode).OrderBy(g => g.Key))
+        // Sheet1：全量
+        var all = wb.Worksheets.Add("全量");
+        WriteHeader(all);
+        WriteRows(all, rows);
+
+        // 分类 Sheet：每个分类一个 Sheet（含废弃）
+        foreach (var group in rows.GroupBy(r => r.CategoryCode).OrderBy(g => g.Key, StringComparer.Ordinal))
         {
             var sheetName = SanitizeSheetName(group.Key);
             var ws = wb.Worksheets.Add(sheetName);
-            ws.Cell(1, 1).Value = "编码";
-            ws.Cell(1, 2).Value = "名称";
-            ws.Cell(1, 3).Value = "规格描述";
-            ws.Cell(1, 4).Value = "规格号";
-            ws.Cell(1, 5).Value = "品牌";
-            var ordered = group
-                .OrderBy(r => r.SerialNo)
-                .ThenBy(r => r.Suffix, StringComparer.Ordinal);
-            var row = 2;
-            foreach (var item in ordered)
-            {
-                ws.Cell(row, 1).Value = item.Code;
-                ws.Cell(row, 2).Value = item.Name;
-                ws.Cell(row, 3).Value = item.Description;
-                ws.Cell(row, 4).Value = item.Spec;
-                ws.Cell(row, 5).Value = item.Brand ?? "";
-                row++;
-            }
+            WriteHeader(ws);
+            WriteRows(ws, group);
         }
 
-        if (!wb.Worksheets.Any())
-        {
-            var ws = wb.Worksheets.Add("Empty");
-            ws.Cell(1, 1).Value = "编码";
-            ws.Cell(1, 2).Value = "名称";
-            ws.Cell(1, 3).Value = "规格描述";
-            ws.Cell(1, 4).Value = "规格号";
-            ws.Cell(1, 5).Value = "品牌";
-        }
+        // 无数据：仅保留 Sheet1 表头
+        if (rows.Count == 0)
+            AutoFit(all);
+        else
+            AutoFitAll(wb);
 
         wb.SaveAs(filePath);
         return Task.CompletedTask;
+    }
+
+    private static void WriteHeader(IXLWorksheet ws)
+    {
+        ws.Cell(1, 1).Value = "编码";
+        ws.Cell(1, 2).Value = "分类编码";
+        ws.Cell(1, 3).Value = "名称";
+        ws.Cell(1, 4).Value = "规格号";
+        ws.Cell(1, 5).Value = "规格描述";
+        ws.Cell(1, 6).Value = "品牌";
+        ws.Cell(1, 7).Value = "状态";
+    }
+
+    private static void WriteRows(IXLWorksheet ws, IEnumerable<MaterialExportRow> rows)
+    {
+        var ordered = rows
+            .OrderByDescending(r => r.Status)
+            .ThenBy(r => r.CategoryCode, StringComparer.Ordinal)
+            .ThenBy(r => r.SerialNo)
+            .ThenBy(r => r.Suffix, StringComparer.Ordinal)
+            .ThenBy(r => r.Code, StringComparer.Ordinal);
+
+        var row = 2;
+        foreach (var item in ordered)
+        {
+            var statusText = item.Status == 1 ? "正常" : "已废弃";
+            ws.Cell(row, 1).Value = item.Code;
+            ws.Cell(row, 2).Value = item.CategoryCode;
+            ws.Cell(row, 3).Value = item.Name;
+            ws.Cell(row, 4).Value = item.Spec;
+            ws.Cell(row, 5).Value = item.Description;
+            ws.Cell(row, 6).Value = item.Brand ?? "";
+            ws.Cell(row, 7).Value = statusText;
+            row++;
+        }
+    }
+
+    private static void AutoFitAll(XLWorkbook wb)
+    {
+        foreach (var ws in wb.Worksheets)
+            AutoFit(ws);
+    }
+
+    private static void AutoFit(IXLWorksheet ws)
+    {
+        ws.Columns(1, 7).AdjustToContents();
+        // 导出优化：确保分类/名称列可读（最小宽度兜底）
+        if (ws.Column(2).Width < 20) ws.Column(2).Width = 20;
+        if (ws.Column(3).Width < 25) ws.Column(3).Width = 25;
     }
 
     private static string SanitizeSheetName(string name)

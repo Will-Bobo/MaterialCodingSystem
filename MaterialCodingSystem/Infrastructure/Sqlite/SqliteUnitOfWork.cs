@@ -6,6 +6,7 @@ namespace MaterialCodingSystem.Infrastructure.Sqlite;
 public sealed class SqliteUnitOfWork : IUnitOfWork
 {
     private readonly SqliteConnection _connection;
+    private const int BeginTxMaxAttempts = 5;
 
     public SqliteUnitOfWork(SqliteConnection connection)
     {
@@ -19,7 +20,9 @@ public sealed class SqliteUnitOfWork : IUnitOfWork
             await _connection.OpenAsync(ct);
         }
 
-        await using var tx = _connection.BeginTransaction();
+        // Shared-cache in-memory sqlite concurrency: BeginTransaction may fail transiently under contention.
+        // We retry starting the transaction a few times (no business logic here; just robustness).
+        SqliteTransaction tx = await BeginTransactionWithRetryAsync(ct);
         AmbientSqliteContext.CurrentTransaction = tx;
         try
         {
@@ -36,6 +39,27 @@ public sealed class SqliteUnitOfWork : IUnitOfWork
         {
             AmbientSqliteContext.CurrentTransaction = null;
         }
+    }
+
+    private async Task<SqliteTransaction> BeginTransactionWithRetryAsync(CancellationToken ct)
+    {
+        var delayMs = 10;
+        for (var attempt = 1; attempt <= BeginTxMaxAttempts; attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                return _connection.BeginTransaction();
+            }
+            catch (SqliteException) when (attempt < BeginTxMaxAttempts)
+            {
+                await Task.Delay(delayMs, ct);
+                delayMs = Math.Min(delayMs * 2, 200);
+            }
+        }
+
+        // last attempt throws
+        return _connection.BeginTransaction();
     }
 }
 

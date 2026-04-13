@@ -26,6 +26,8 @@ public interface IMaterialRepository
 
     Task<bool> CategoryExistsAsync(CategoryCode categoryCode, CancellationToken ct = default);
 
+    Task<string?> GetCategoryNameByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default);
+
     Task InsertCategoryAsync(string code, string name, CancellationToken ct = default);
 
     Task<IReadOnlyList<(string Code, string Name)>> ListCategoriesAsync(CancellationToken ct = default);
@@ -40,6 +42,9 @@ public interface IMaterialRepository
 
     Task<MaterialGroupSnapshot?> GetGroupSnapshotAsync(int groupId, CancellationToken ct = default);
 
+    /// <summary>替代料基准校验：同组 suffix='A' 的状态。</summary>
+    Task<MaterialItemStatusSnapshot?> GetBaseItemStatusByGroupIdAsync(int groupId, CancellationToken ct = default);
+
     Task<MaterialItemStatusSnapshot?> GetItemStatusByCodeAsync(string code, CancellationToken ct = default);
 
     Task<int?> GetGroupIdByItemCodeAsync(string code, CancellationToken ct = default);
@@ -52,5 +57,8 @@ public interface IMaterialRepository
 
     /// <summary>PRD 7.4：仅 status=1，按 category_code, serial_no, suffix 排序。</summary>
     Task<IReadOnlyList<MaterialExportRow>> ListActiveItemsForExportAsync(CancellationToken ct = default);
+
+    /// <summary>PRD 7.4（V1.3）：导出全量（含 status=0），name=category.name，排序见 PRD。</summary>
+    Task<IReadOnlyList<MaterialExportRow>> ListAllItemsForExportAsync(CancellationToken ct = default);
 }
 

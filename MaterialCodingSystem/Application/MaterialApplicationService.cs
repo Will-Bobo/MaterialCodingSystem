@@ -105,6 +105,12 @@ public sealed class MaterialApplicationService
                 return Result<GroupInfoDto>.Fail(ErrorCodes.NOT_FOUND, "group not found.");
             }
 
+            var categoryName = await _repo.GetCategoryNameByCodeAsync(snap.CategoryCode, ct);
+            if (string.IsNullOrWhiteSpace(categoryName))
+            {
+                return Result<GroupInfoDto>.Fail(ErrorCodes.CATEGORY_NOT_FOUND, "category_code not found.");
+            }
+
             string nextSuffix;
             try
             {
@@ -120,6 +126,7 @@ public sealed class MaterialApplicationService
             return Result<GroupInfoDto>.Ok(new GroupInfoDto(
                 GroupId: snap.GroupId,
                 CategoryCode: snap.CategoryCode.Value,
+                CategoryName: categoryName,
                 SerialNo: snap.SerialNo,
                 ExistingSuffixes: existing,
                 NextSuffix: nextSuffix
@@ -155,11 +162,6 @@ public sealed class MaterialApplicationService
     public Task<Result<CreateMaterialItemAResponse>> CreateMaterialItemA(CreateMaterialItemARequest req, CancellationToken ct = default)
         => ExecuteWithRetry(async () =>
         {
-            if (string.IsNullOrWhiteSpace(req.Name))
-            {
-                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "name is required.");
-            }
-
             if (string.IsNullOrWhiteSpace(req.Description))
             {
                 return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "description is required.");
@@ -181,7 +183,13 @@ public sealed class MaterialApplicationService
             var categoryExists = await _repo.CategoryExistsAsync(categoryCode, ct);
             if (!categoryExists)
             {
-                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "category_code not found.");
+                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.CATEGORY_NOT_FOUND, "category_code not found.");
+            }
+
+            var categoryName = await _repo.GetCategoryNameByCodeAsync(categoryCode, ct);
+            if (string.IsNullOrWhiteSpace(categoryName))
+            {
+                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.CATEGORY_NOT_FOUND, "category_code not found.");
             }
 
             var specExists = await _repo.SpecExistsAsync(categoryCode, spec, ct);
@@ -212,7 +220,7 @@ public sealed class MaterialApplicationService
                 categoryCode: categoryCode,
                 serialNo: serialNo,
                 spec: spec,
-                name: req.Name,
+                name: categoryName,
                 description: req.Description,
                 brand: req.Brand
             );
@@ -253,11 +261,6 @@ public sealed class MaterialApplicationService
     public Task<Result<CreateReplacementResponse>> CreateReplacement(CreateReplacementRequest req, CancellationToken ct = default)
         => ExecuteWithRetry(async () =>
         {
-            if (string.IsNullOrWhiteSpace(req.Name))
-            {
-                return Result<CreateReplacementResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "name is required.");
-            }
-
             if (string.IsNullOrWhiteSpace(req.Description))
             {
                 return Result<CreateReplacementResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "description is required.");
@@ -279,6 +282,24 @@ public sealed class MaterialApplicationService
                 return Result<CreateReplacementResponse>.Fail(ErrorCodes.NOT_FOUND, "group not found.");
             }
 
+            var baseSnap = await _repo.GetBaseItemStatusByGroupIdAsync(req.GroupId, ct);
+            if (baseSnap is not null && baseSnap.Status == 0)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.ANCHOR_ITEM_DEPRECATED, "anchor item deprecated.");
+            }
+
+            var categoryName = await _repo.GetCategoryNameByCodeAsync(snap.CategoryCode, ct);
+            if (string.IsNullOrWhiteSpace(categoryName))
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.CATEGORY_NOT_FOUND, "category_code not found.");
+            }
+
+            var specExists = await _repo.SpecExistsAsync(snap.CategoryCode, spec, ct);
+            if (specExists)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
+            }
+
             // suffix 连续性与 overflow 规则交由 Domain（PRD V1）
             try
             {
@@ -287,12 +308,6 @@ public sealed class MaterialApplicationService
             catch (DomainException ex) when (ex.Code is "SUFFIX_SEQUENCE_BROKEN" or "SUFFIX_OVERFLOW")
             {
                 return Result<CreateReplacementResponse>.Fail(ex.Code, ex.Message);
-            }
-
-            var specExists = await _repo.SpecExistsAsync(snap.CategoryCode, spec, ct);
-            if (specExists)
-            {
-                return Result<CreateReplacementResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
             }
 
             var group = MaterialGroup.CreateNew(
@@ -318,6 +333,16 @@ public sealed class MaterialApplicationService
             }
 
             var item = group.AddReplacement(spec, req.Name, req.Description, req.Brand);
+            // name 写入规则：从分类名快照注入（不来自用户输入）
+            item = new MaterialItem(
+                code: item.Code,
+                suffix: item.Suffix,
+                spec: item.Spec,
+                name: categoryName,
+                description: item.Description,
+                specNormalized: item.SpecNormalized,
+                brand: item.Brand
+            );
 
             try
             {
@@ -350,6 +375,134 @@ public sealed class MaterialApplicationService
             ));
         }, ct, retryConstraint: IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX);
 
+    public Task<Result<CreateReplacementResponse>> CreateReplacementByCode(CreateReplacementByCodeRequest req, CancellationToken ct = default)
+        => ExecuteWithRetry(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(req.BaseMaterialCode))
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "base_material_code is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(req.Description))
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "description is required.");
+            }
+
+            Spec spec;
+            try
+            {
+                spec = new Spec(req.Spec);
+            }
+            catch (DomainException ex) when (ex.Code == "VALIDATION_ERROR")
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.VALIDATION_ERROR, ex.Message);
+            }
+
+            // 1) base code 是否存在
+            var baseSnap = await _repo.GetItemStatusByCodeAsync(req.BaseMaterialCode.Trim(), ct);
+            if (baseSnap is null)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.NOT_FOUND, "base item not found.");
+            }
+
+            // 2) base status == 1
+            if (baseSnap.Status == 0)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.ANCHOR_ITEM_DEPRECATED, "anchor item deprecated.");
+            }
+
+            // 3) 解析 group
+            var groupId = await _repo.GetGroupIdByItemCodeAsync(req.BaseMaterialCode.Trim(), ct);
+            if (groupId is null)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.NOT_FOUND, "group not found.");
+            }
+
+            // 4) category 是否存在（由 group snapshot 的 category_code 反查 name；缺失即 CATEGORY_NOT_FOUND）
+            var snap = await _repo.GetGroupSnapshotAsync(groupId.Value, ct);
+            if (snap is null)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.NOT_FOUND, "group not found.");
+            }
+
+            var categoryName = await _repo.GetCategoryNameByCodeAsync(snap.CategoryCode, ct);
+            if (string.IsNullOrWhiteSpace(categoryName))
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.CATEGORY_NOT_FOUND, "category_code not found.");
+            }
+
+            // 5) 规格唯一性
+            var specExists = await _repo.SpecExistsAsync(snap.CategoryCode, spec, ct);
+            if (specExists)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
+            }
+
+            // 6) 才允许进入 suffix 分配（连续性/overflow）
+            try
+            {
+                _ = SuffixAllocator.AllocateNextSuffix(snap.ExistingSuffixes);
+            }
+            catch (DomainException ex) when (ex.Code is "SUFFIX_SEQUENCE_BROKEN" or "SUFFIX_OVERFLOW")
+            {
+                return Result<CreateReplacementResponse>.Fail(ex.Code, ex.Message);
+            }
+
+            var group = MaterialGroup.CreateNew(
+                categoryCode: snap.CategoryCode,
+                serialNo: snap.SerialNo,
+                spec: new Spec("DUMMY"),
+                name: "DUMMY",
+                description: "DUMMY",
+                brand: null
+            );
+
+            foreach (var s in snap.ExistingSuffixes.Where(x => x != 'A').OrderBy(x => x))
+            {
+                group.DebugAddItemForTestOnly(new MaterialItem(
+                    code: CodeGenerator.GenerateItemCode(snap.CategoryCode.Value, snap.SerialNo, s),
+                    suffix: new Domain.ValueObjects.Suffix(s),
+                    spec: new Spec("DUMMY-" + s),
+                    name: "DUMMY",
+                    description: "DUMMY",
+                    specNormalized: new Domain.ValueObjects.SpecNormalized(SpecNormalizer.NormalizeV1("DUMMY")),
+                    brand: null
+                ));
+            }
+
+            var item = group.AddReplacement(spec, categoryName, req.Description, req.Brand);
+
+            try
+            {
+                await _repo.InsertItemAsync(groupId.Value, item, ct);
+            }
+            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX)
+            {
+                throw;
+            }
+            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CATEGORY_SPEC)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
+            }
+            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CODE)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.CODE_CONFLICT_RETRY, "code conflict.");
+            }
+            catch (DbConstraintViolationException)
+            {
+                return Result<CreateReplacementResponse>.Fail(ErrorCodes.INTERNAL_ERROR, "constraint violation on insert item.");
+            }
+
+            return Result<CreateReplacementResponse>.Ok(new CreateReplacementResponse(
+                ItemId: 0,
+                GroupId: groupId.Value,
+                Code: item.Code,
+                Suffix: item.Suffix.Value.ToString(),
+                Spec: item.Spec.Value,
+                SpecNormalized: item.SpecNormalized.Value
+            ));
+        }, ct, retryConstraint: IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX);
+
     private async Task<Result<T>> ExecuteWithRetry<T>(
         Func<Task<Result<T>>> action,
         CancellationToken ct,
@@ -369,11 +522,17 @@ public sealed class MaterialApplicationService
             }
             catch (DbConstraintViolationException ex) when (ex.Constraint == retryConstraint)
             {
-                return Result<T>.Fail(ErrorCodes.CODE_CONFLICT_RETRY, "conflict retry exceeded.");
+                var code = retryConstraint == IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX
+                    ? ErrorCodes.SUFFIX_ALLOCATION_FAILED
+                    : ErrorCodes.CODE_CONFLICT_RETRY;
+                return Result<T>.Fail(code, "conflict retry exceeded.");
             }
         }
 
-        return Result<T>.Fail(ErrorCodes.CODE_CONFLICT_RETRY, "conflict retry exceeded.");
+        var code2 = retryConstraint == IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX
+            ? ErrorCodes.SUFFIX_ALLOCATION_FAILED
+            : ErrorCodes.CODE_CONFLICT_RETRY;
+        return Result<T>.Fail(code2, "conflict retry exceeded.");
     }
 
     public Task<Result<DeprecateResponse>> DeprecateMaterialItem(DeprecateRequest req, CancellationToken ct = default)
@@ -450,11 +609,11 @@ public sealed class MaterialApplicationService
 
         return _uow.ExecuteAsync(async () =>
         {
-            var rows = await _repo.ListActiveItemsForExportAsync(ct);
+            // PRD V1.3：Sheet1=全量（含废弃）；分类 Sheet 同样包含全部数据
+            var rows = await _repo.ListAllItemsForExportAsync(ct);
             await _excelExporter.WriteAsync(filePath, rows, ct);
-            var sheetCount = rows.Count == 0
-                ? 1
-                : rows.Select(r => r.CategoryCode).Distinct().Count();
+            // UI 文案：{2} 个分类 Sheet（不包含 Sheet1；无数据时也为 0）
+            var sheetCount = rows.Select(r => r.CategoryCode).Distinct().Count();
             return Result<ExportMaterialsResponse>.Ok(new ExportMaterialsResponse(
                 FilePath: filePath,
                 RowCount: rows.Count,

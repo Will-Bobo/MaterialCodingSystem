@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Presentation.UiSemantics;
@@ -45,9 +46,10 @@ public sealed class SearchViewModel : ViewModelBase
 
     public RelayCommand SearchByCodeCommand { get; }
     public RelayCommand SearchBySpecCommand { get; }
-    public RelayCommand AddSelectedAsReplacementCommand { get; }
     public RelayCommand<MaterialItemSpecHit> AddSpecHitAsReplacementCommand { get; }
     public RelayCommand<MaterialItemSummary> AddCodeHitAsReplacementCommand { get; }
+    public RelayCommand<MaterialItemSpecHit> DeprecateSpecHitCommand { get; }
+    public RelayCommand<MaterialItemSummary> DeprecateCodeHitCommand { get; }
     public RelayCommand RefreshCategoriesCommand { get; }
 
     public SearchViewModel(MaterialApplicationService app, MainViewModel main, IUiRenderer uiRenderer, IUiDispatcher uiDispatcher)
@@ -58,9 +60,10 @@ public sealed class SearchViewModel : ViewModelBase
         _uiDispatcher = uiDispatcher;
         SearchByCodeCommand = new RelayCommand(async () => await SearchByCodeAsync());
         SearchBySpecCommand = new RelayCommand(async () => await SearchBySpecAsync());
-        AddSelectedAsReplacementCommand = new RelayCommand(async () => await AddSelectedAsReplacementAsync());
         AddSpecHitAsReplacementCommand = new RelayCommand<MaterialItemSpecHit>(async hit => await AddAsReplacementAsync(hit?.Code));
         AddCodeHitAsReplacementCommand = new RelayCommand<MaterialItemSummary>(async hit => await AddAsReplacementAsync(hit?.Code));
+        DeprecateSpecHitCommand = new RelayCommand<MaterialItemSpecHit>(async hit => await DeprecateAsync(hit?.Code, hit?.Status));
+        DeprecateCodeHitCommand = new RelayCommand<MaterialItemSummary>(async hit => await DeprecateAsync(hit?.Code, hit?.Status));
         RefreshCategoriesCommand = new RelayCommand(async () => await RefreshCategoriesAsync());
 
         _ = RefreshCategoriesAsync();
@@ -144,17 +147,6 @@ public sealed class SearchViewModel : ViewModelBase
         Message = UiResources.Format(UiResourceKeys.Info.SearchSpecDone, res.Data.Items.Count);
     }
 
-    private async Task AddSelectedAsReplacementAsync()
-    {
-        if (SelectedSpecResult is null)
-        {
-            Message = UiResources.Get(UiResourceKeys.Info.SearchSelectSpecRowFirst);
-            return;
-        }
-
-        await AddAsReplacementAsync(SelectedSpecResult.Code);
-    }
-
     private async Task AddAsReplacementAsync(string? code)
     {
         if (string.IsNullOrWhiteSpace(code))
@@ -163,6 +155,46 @@ public sealed class SearchViewModel : ViewModelBase
             return;
         }
 
+        // 仅传 code 会丢失 Anchor 展示信息；这里使用 DTO 注入
+        if (SelectedSpecResult is not null && SelectedSpecResult.Code == code)
+        {
+            await _main.NavigateToReplacementFromDtoAsync(SelectedSpecResult);
+            return;
+        }
+
+        var codeHit = CodeResults.FirstOrDefault(x => x.Code == code);
+        if (codeHit is not null)
+        {
+            await _main.NavigateToReplacementFromDtoAsync(codeHit);
+            return;
+        }
+
         await _main.NavigateToReplacementFromExistingCodeAsync(code);
+    }
+
+    private async Task DeprecateAsync(string? code, long? status)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return;
+        if (status == 0)
+            return;
+
+        if (!_uiRenderer.ConfirmDeprecate(code))
+            return;
+
+        Message = UiResources.Get(UiResourceKeys.Info.DeprecateProcessing);
+        var res = await _app.DeprecateMaterialItem(new DeprecateRequest(code));
+        if (res.IsSuccess)
+        {
+            Message = UiResources.Format(UiResourceKeys.Info.DeprecateDone, res.Data!.Code);
+            if (!string.IsNullOrWhiteSpace(CodeKeyword))
+                await SearchByCodeAsync();
+            if (!string.IsNullOrWhiteSpace(SpecKeyword) && !string.IsNullOrWhiteSpace(SelectedCategory?.Code))
+                await SearchBySpecAsync();
+            return;
+        }
+
+        var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.Deprecate);
+        _uiDispatcher.Apply(plan, this);
     }
 }

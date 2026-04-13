@@ -54,11 +54,11 @@ public class CreateMaterialItemATests
     }
 
     [Fact]
-    public async Task CreateA_WhenNameBlank_ReturnsValidationError()
+    public async Task CreateA_WhenNameBlank_IsIgnored_AndStillSucceeds()
     {
         var app = new MaterialApplicationService(
             uow: new NoopUnitOfWork(),
-            repo: new FakeMaterialRepository { CategoryExists = true, SpecExists = false }
+            repo: new FakeMaterialRepository { CategoryExists = true, CategoryName = "默认分类", SpecExists = false }
         );
 
         var res = await app.CreateMaterialItemA(new CreateMaterialItemARequest(
@@ -69,9 +69,7 @@ public class CreateMaterialItemATests
             Brand: null
         ));
 
-        Assert.False(res.IsSuccess);
-        Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error!.Code);
-        Assert.Equal("name is required.", res.Error.Message);
+        Assert.True(res.IsSuccess);
     }
 
     [Fact]
@@ -96,7 +94,7 @@ public class CreateMaterialItemATests
     }
 
     [Fact]
-    public async Task CreateA_WhenCategoryNotFound_ReturnsValidationError()
+    public async Task CreateA_WhenCategoryNotFound_ReturnsCategoryNotFound()
     {
         var app = new MaterialApplicationService(
             uow: new NoopUnitOfWork(),
@@ -112,7 +110,7 @@ public class CreateMaterialItemATests
         ));
 
         Assert.False(res.IsSuccess);
-        Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error!.Code);
+        Assert.Equal(ErrorCodes.CATEGORY_NOT_FOUND, res.Error!.Code);
     }
 
     [Fact]

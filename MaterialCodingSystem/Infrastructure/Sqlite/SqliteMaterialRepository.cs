@@ -85,6 +85,13 @@ public sealed class SqliteMaterialRepository : IMaterialRepository
         return found is not null;
     }
 
+    public async Task<string?> GetCategoryNameByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default)
+    {
+        var sql = "SELECT name FROM category WHERE code = @code LIMIT 1;";
+        return await _connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            sql, new { code = categoryCode.Value }, transaction: Tx, cancellationToken: ct));
+    }
+
     public async Task InsertCategoryAsync(string code, string name, CancellationToken ct = default)
     {
         EnsureWriteTransaction();
@@ -227,6 +234,15 @@ WHERE mg.id = @groupId;";
         );
     }
 
+    public async Task<MaterialItemStatusSnapshot?> GetBaseItemStatusByGroupIdAsync(int groupId, CancellationToken ct = default)
+    {
+        var sql = "SELECT code AS Code, status AS Status FROM material_item WHERE group_id=@groupId AND suffix='A' LIMIT 1;";
+        var row = await _connection.QuerySingleOrDefaultAsync<dynamic>(new CommandDefinition(
+            sql, new { groupId }, transaction: Tx, cancellationToken: ct));
+        if (row is null) return null;
+        return new MaterialItemStatusSnapshot((string)row.Code, (int)row.Status);
+    }
+
     public async Task<MaterialItemStatusSnapshot?> GetItemStatusByCodeAsync(string code, CancellationToken ct = default)
     {
         var sql = "SELECT code AS Code, status AS Status FROM material_item WHERE code=@code LIMIT 1;";
@@ -270,7 +286,7 @@ WHERE mg.id = @groupId;";
         async Task<List<MaterialItemSummary>> QueryAsync(string pattern)
         {
             var sql = $@"
-SELECT code AS Code, name AS Name, spec AS Spec, brand AS Brand
+SELECT code AS Code, name AS Name, spec AS Spec, description AS Description, brand AS Brand, status AS Status
 FROM material_item
 WHERE code LIKE @pattern
   {statusFilter}
@@ -300,7 +316,7 @@ LIMIT @limit OFFSET @offset;";
     public async Task<PagedResult<MaterialItemSpecHit>> SearchBySpecAsync(SearchQuery query, CancellationToken ct = default)
     {
         var sql = @"
-SELECT code AS Code, spec AS Spec, description AS Description, name AS Name, brand AS Brand, group_id AS GroupId
+SELECT code AS Code, spec AS Spec, description AS Description, name AS Name, brand AS Brand, status AS Status, group_id AS GroupId
 FROM material_item
 WHERE category_code = @categoryCode
   AND status = 1
@@ -323,12 +339,44 @@ LIMIT 20;";
     public async Task<IReadOnlyList<MaterialExportRow>> ListActiveItemsForExportAsync(CancellationToken ct = default)
     {
         var sql = @"
-SELECT mi.code AS Code, mi.name AS Name, mi.description AS Description, mi.spec AS Spec, mi.brand AS Brand,
-       mg.category_code AS CategoryCode, mg.serial_no AS SerialNo, mi.suffix AS Suffix
+SELECT
+  mi.code AS Code,
+  mi.spec AS Spec,
+  mi.description AS Description,
+  mi.brand AS Brand,
+  mg.category_code AS CategoryCode,
+  mg.serial_no AS SerialNo,
+  mi.suffix AS Suffix,
+  mi.status AS Status,
+  c.name AS Name
 FROM material_item mi
 JOIN material_group mg ON mi.group_id = mg.id
+JOIN category c ON mg.category_id = c.id
 WHERE mi.status = 1
-ORDER BY mg.category_code, mg.serial_no, mi.suffix;";
+ORDER BY mi.status DESC, mg.category_code, mg.serial_no, mi.suffix, mi.code;";
+
+        var list = (await _connection.QueryAsync<MaterialExportRow>(new CommandDefinition(
+            sql, transaction: Tx, cancellationToken: ct))).ToList();
+        return list;
+    }
+
+    public async Task<IReadOnlyList<MaterialExportRow>> ListAllItemsForExportAsync(CancellationToken ct = default)
+    {
+        var sql = @"
+SELECT
+  mi.code AS Code,
+  mi.spec AS Spec,
+  mi.description AS Description,
+  mi.brand AS Brand,
+  mg.category_code AS CategoryCode,
+  mg.serial_no AS SerialNo,
+  mi.suffix AS Suffix,
+  mi.status AS Status,
+  c.name AS Name
+FROM material_item mi
+JOIN material_group mg ON mi.group_id = mg.id
+JOIN category c ON mg.category_id = c.id
+ORDER BY mi.status DESC, mg.category_code, mg.serial_no, mi.suffix, mi.code;";
 
         var list = (await _connection.QueryAsync<MaterialExportRow>(new CommandDefinition(
             sql, transaction: Tx, cancellationToken: ct))).ToList();

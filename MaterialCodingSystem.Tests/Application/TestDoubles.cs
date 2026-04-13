@@ -24,6 +24,7 @@ internal sealed class CountingUnitOfWork : IUnitOfWork
 internal sealed class FakeMaterialRepository : IMaterialRepository
 {
     public bool CategoryExists { get; set; } = true;
+    public string CategoryName { get; set; } = "默认分类";
     public bool SpecExists { get; set; }
 
     public int MaxSerialNo { get; set; }
@@ -40,6 +41,8 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
 
     public bool ItemExistsByCode { get; set; } = true;
     public int ItemStatusByCode { get; set; } = 1;
+    public int GroupSnapshotCalls { get; private set; }
+    public int CategoryNameCalls { get; private set; }
     public int DeprecateCalled { get; private set; }
 
     public int FailGroupInsertWithSerialConflictTimes { get; set; }
@@ -48,6 +51,12 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
 
     public Task<bool> CategoryExistsAsync(CategoryCode categoryCode, CancellationToken ct = default)
         => Task.FromResult(CategoryExists);
+
+    public Task<string?> GetCategoryNameByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default)
+    {
+        CategoryNameCalls++;
+        return Task.FromResult<string?>(CategoryExists ? CategoryName : null);
+    }
 
     /// <summary>若设置，则 <see cref="InsertCategoryAsync"/> 抛出与 SQLite 类似的唯一约束信息，供 CreateCategory 映射测试使用。</summary>
     public string? InsertCategoryConstraintViolationMessage { get; set; }
@@ -118,6 +127,7 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
 
     public Task<MaterialGroupSnapshot?> GetGroupSnapshotAsync(int groupId, CancellationToken ct = default)
     {
+        GroupSnapshotCalls++;
         if (!GroupExists) return Task.FromResult<MaterialGroupSnapshot?>(null);
         return Task.FromResult<MaterialGroupSnapshot?>(new MaterialGroupSnapshot(
             GroupId: groupId,
@@ -125,6 +135,14 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
             SerialNo: GroupSerialNo,
             ExistingSuffixes: ExistingSuffixes
         ));
+    }
+
+    public int BaseItemStatusByGroupId { get; set; } = 1;
+
+    public Task<MaterialItemStatusSnapshot?> GetBaseItemStatusByGroupIdAsync(int groupId, CancellationToken ct = default)
+    {
+        if (!GroupExists) return Task.FromResult<MaterialItemStatusSnapshot?>(null);
+        return Task.FromResult<MaterialItemStatusSnapshot?>(new MaterialItemStatusSnapshot($"{GroupCategoryCode}{GroupSerialNo:D7}A", BaseItemStatusByGroupId));
     }
 
     public Task<MaterialItemStatusSnapshot?> GetItemStatusByCodeAsync(string code, CancellationToken ct = default)
@@ -158,6 +176,9 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
     }
 
     public Task<IReadOnlyList<MaterialExportRow>> ListActiveItemsForExportAsync(CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<MaterialExportRow>>(Array.Empty<MaterialExportRow>());
+
+    public Task<IReadOnlyList<MaterialExportRow>> ListAllItemsForExportAsync(CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<MaterialExportRow>>(Array.Empty<MaterialExportRow>());
 }
 

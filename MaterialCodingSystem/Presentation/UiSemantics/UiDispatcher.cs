@@ -112,7 +112,7 @@ public sealed class WpfUiDispatcher : IUiDispatcher
                 cr.Result = "";
                 break;
             case UiClearStrategy.CreateReplacementGroupInfo:
-                cr.GroupInfo = "";
+                // 基准编码输入/AnchorInfo 展示已移除，保留清槽兼容但不写入无效字段
                 break;
             case UiClearStrategy.CreateReplacementEmbeddedStatus:
                 cr.CodeSearchStatus = "";
@@ -206,7 +206,7 @@ public sealed class WpfUiDispatcher : IUiDispatcher
                 vm.CodeSearchStatus = text;
                 break;
             case UiBindings.GroupInfo:
-                vm.GroupInfo = text;
+                // 基准编码输入/AnchorInfo 展示已移除
                 break;
         }
     }

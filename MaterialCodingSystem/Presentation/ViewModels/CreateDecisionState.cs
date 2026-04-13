@@ -6,5 +6,6 @@ public enum CreateDecisionState
     Searching,
     NoCandidate,
     HasCandidate,
-    ForcedCreate
+    ForcedCreate,
+    Success
 }

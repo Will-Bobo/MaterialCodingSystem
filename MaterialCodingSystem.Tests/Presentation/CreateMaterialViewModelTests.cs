@@ -42,6 +42,8 @@ public sealed class CreateMaterialViewModelTests
         }
 
         public bool ConfirmDuplicateCreate() => true;
+
+        public bool ConfirmDeprecate(string code) => true;
     }
 
     private sealed class NoopUiDispatcher : IUiDispatcher
@@ -55,7 +57,7 @@ public sealed class CreateMaterialViewModelTests
     public async Task When_spec_field_active_uses_spec_as_search_keyword()
     {
         var repo = new FakeMaterialRepository();
-        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "PART", "DESC", "N", null, 1));
+        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "PART", "DESC", "N", null, 1, 1));
         var app = new MaterialApplicationService(new NoopUnitOfWork(), repo);
         var vm = new CreateMaterialViewModel(
             app,
@@ -80,7 +82,7 @@ public sealed class CreateMaterialViewModelTests
     {
         var repo = new FakeMaterialRepository();
         repo.CategoryRows.Add(("ZDB", "电容"));
-        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "P", "10UF 16V", "N", null, 1));
+        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "P", "10UF 16V", "N", null, 1, 1));
         var app = new MaterialApplicationService(new NoopUnitOfWork(), repo);
         var vm = new CreateMaterialViewModel(
             app,

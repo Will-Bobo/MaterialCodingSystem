@@ -16,5 +16,12 @@ public sealed record CreateReplacementRequest(
     string? Brand
 );
 
+public sealed record CreateReplacementByCodeRequest(
+    string BaseMaterialCode,
+    string Spec,
+    string Description,
+    string? Brand
+);
+
 public sealed record DeprecateRequest(string Code);
 

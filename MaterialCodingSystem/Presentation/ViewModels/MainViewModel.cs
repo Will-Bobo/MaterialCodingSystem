@@ -61,14 +61,24 @@ public sealed class MainViewModel : ViewModelBase
     public async Task NavigateToReplacementFromExistingCodeAsync(string existingCode)
     {
         SelectedTabIndex = 1;
-        CreateReplacement.ExistingItemCode = existingCode;
-        await CreateReplacement.ResolveGroupAndReportAsync();
+        await CreateReplacement.LoadFromCodeAsync(existingCode);
+    }
+
+    public async Task NavigateToReplacementFromDtoAsync(MaterialItemSummary dto)
+    {
+        SelectedTabIndex = 1;
+        await CreateReplacement.LoadFromDtoAsync(dto);
+    }
+
+    public async Task NavigateToReplacementFromDtoAsync(MaterialItemSpecHit dto)
+    {
+        SelectedTabIndex = 1;
+        await CreateReplacement.LoadFromDtoAsync(dto);
     }
 
     public async Task NavigateToReplacementFromCandidateAsync(MaterialItemSpecHit hit)
     {
         SelectedTabIndex = 1;
-        CreateReplacement.GroupId = (int)hit.GroupId;
-        await CreateReplacement.LoadGroupInfoAsync();
+        await CreateReplacement.LoadFromDtoAsync(hit);
     }
 }

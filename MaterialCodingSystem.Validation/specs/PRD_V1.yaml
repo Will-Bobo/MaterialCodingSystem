@@ -2,8 +2,130 @@ spec_version: v1
 
 meta:
   system: material-code-system
-  description: material coding system validation spec (V1 freeze aligned to PRD V1.2)
+  description: material coding system validation spec (V1.3 rule freeze aligned to PRD + meta.prd_freeze)
   invariant: true
+  testing_scope_note: |
+    约束：当前阶段仅做「规则冻结」与轻量契约对齐，不新增复杂测试逻辑。
+    不新增：
+      - 并发测试（除既有用例）
+      - “重试耗尽”真实触发测试
+      - 复杂 SQL 验证/排序全量校验
+    上述测试延迟到 Phase 2 实现阶段补齐。
+  case_tags_note: |
+    说明：当前 Validation runner 的 YAML case 模型不支持为每个用例扩展顶层字段（例如 `tags:`），
+    为保证 YAML 可被现有解析器稳定解析，本项目采用 `meta.case_tags` 做“用例ID → tags数组”的映射标注。
+    约定：
+      - contract_only：仅验证契约，不依赖真实实现
+      - echo：当前通过 `when.action=echo` 的输入回声验证
+  case_tags:
+    SUFFIX_RETRY_002: [contract_only, echo]
+    STATUS_DISPLAY_001: [contract_only, echo]
+    EXPORT_ORDER_001: [contract_only, echo]
+    CATEGORY_NOT_FOUND_001: [contract_only, echo]
+  prd_freeze:
+    version: "2026-04-13"
+    name_policy:
+      source: category.name
+      persistence: snapshot
+      user_editable: false
+      mutation: immutable_after_creation
+      transaction:
+        read_category_name_same_transaction_as_insert: true
+        same_connection: true
+        snapshot_basis: transaction_start_moment
+      description: |
+        物料名称不由用户输入；
+        创建时在与插入同一事务、同一连接内读取 category.name 并写入 material_item.name 快照；
+        后续分类改名不级联更新已有物料 name。
+    replacement_creation:
+      mode: by_code
+      input: base_material_code
+      behavior:
+        - 系统根据 base_material_code 解析所属组并完成替代料创建编排
+        - 用户不感知 group 或 groupId（Presentation 层禁止暴露）
+      constraint:
+        - 基准物料必须 status = 1（正常）
+      error:
+        deprecated_anchor: ANCHOR_ITEM_DEPRECATED
+      transaction:
+        single_transaction: true
+        steps:
+          - group_resolve
+          - suffix_allocate
+          - item_insert
+        concurrency: suffix_unique_via_db_constraint_and_retry
+    suffix_policy:
+      strategy: A-Z
+      uniqueness: "(group_id, suffix)"
+      uniqueness_scope_note: "唯一性约束包含已废弃数据（status=0）；废弃不释放 suffix 槽位。"
+      allocation:
+        retry:
+          max_attempts: 3
+          on_conflict: retry
+        failure_error: SUFFIX_ALLOCATION_FAILED
+      overflow_error: SUFFIX_OVERFLOW
+    status:
+      active: 1
+      deprecated: 0
+      display:
+        1: 正常
+        0: 已废弃
+      source_of_truth: domain
+      unified_surfaces:
+        - ui
+        - search
+        - export
+    export:
+      sheet1:
+        name: 全量
+        scope: all_items
+        include_deprecated: true
+        order_by:
+          - category_code
+          - serial_no
+          - suffix
+      category_sheets:
+        scope: active_only
+        include_deprecated: false
+        order_by:
+          - category_code
+          - serial_no
+          - suffix
+      sort_note: 禁止仅按完整 code 字符串排序；必须以结构化键排序（与 material_group.serial_no + material_item.suffix 一致）。
+    terminology:
+      material_item_name: "历史名称（快照）"
+      display_name: "当前分类名称（category.name），用于 UI/导出"
+    uniqueness:
+      code: "UNIQUE(code) 含 status=0（废弃不释放）"
+      group_suffix: "UNIQUE(group_id, suffix) 含 status=0（废弃不释放）"
+      category_spec: "spec 唯一性仅约束 status=1；status=0 释放 spec 占用（允许同分类复用 spec）"
+    base_code_definition:
+      equals: material_group.serial_no
+      description: |
+        base_code 不单独存储；
+        排序与导出顺序中的逻辑「base」等价于 material_group.serial_no（与 category_code 组合定位组）。
+    deprecation:
+      cascade: false
+      behavior:
+        - 仅将当前物料标记为 deprecated（status=0）
+        - 不级联废弃同组其他替代料
+      constraint:
+        - 已废弃物料不得作为新增替代料的基准物料
+    error_codes:
+      SUFFIX_ALLOCATION_FAILED: 后缀分配失败（并发重试耗尽，区别于 A-Z 用尽）
+      SUFFIX_OVERFLOW: 后缀耗尽（A-Z 已用完）
+      CODE_CONFLICT_RETRY: 编码冲突（全局 code 唯一等，事务级重试仍失败）
+      ANCHOR_ITEM_DEPRECATED: 基准物料已废弃，禁止以此创建替代料
+    ui_state_machines:
+      replacement_page:
+        anchor_load:
+          states:
+            - 未选择
+            - 加载中
+            - 成功
+            - 失败
+        submit:
+          states_note: 提交态独立（如提交中/成功/失败），禁止与基准加载四态混用同一枚举
 
 
 cases:
@@ -642,6 +764,271 @@ cases:
           exists:
             category_code: ZDA
             serial_no: 1
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 17. V1.3 规则冻结 — Name 快照
+# =====================================================
+  - id: NAME_SNAPSHOT_001
+    title: 创建物料时 item.name 与 category.name 快照一致（见 meta.prd_freeze.name_policy）
+    type: contract_core
+
+    given:
+      db:
+        category:
+          - code: CAP
+            name: Capacitor
+
+      input:
+        category_code: CAP
+        spec: NAME_SNAPSHOT_SPEC_001
+        description: 10uF
+
+    when:
+      action: create_material_A
+
+    then:
+      db:
+        material_item:
+          exists:
+            name: Capacitor
+
+    replay: true
+    deterministic: true
+
+
+  - id: NAME_SNAPSHOT_002
+    title: 分类改名后历史物料 name 不变（种子持仓 + 规范化动作不改变 item.name）
+    type: contract_core
+
+    given:
+      db:
+        category:
+          - code: CAP
+            name: Cap
+        material_group:
+          - id: 1
+            category_code: CAP
+            serial_no: 1
+        material_item:
+          - group_id: 1
+            suffix: A
+            name: Capacitor
+            code: CAP0000001A
+            description: d
+            spec: NAME_SNAPSHOT_SPEC_SEED
+            spec_normalized: D
+
+      input:
+        description: " 10uF   16V   0603  "
+
+    when:
+      action: normalize_spec
+
+    then:
+      output:
+        spec_normalized: "10UF 16V 0603"
+
+      db:
+        category:
+          exists:
+            code: CAP
+            name: Cap
+        material_item:
+          exists:
+            code: CAP0000001A
+            name: Capacitor
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 18. V1.3 — suffix 并发语义与失败码（可执行子集 + 契约回声）
+# =====================================================
+  - id: SUFFIX_RETRY_001
+    title: 同组 suffix 唯一（顺序创建；并发下依赖 UNIQUE+重试，见 meta.prd_freeze.suffix_policy）
+    type: core
+
+    given:
+      db:
+        category:
+          - code: ZDA
+            name: ZDA
+        material_group:
+          - id: 1
+            category_code: ZDA
+            serial_no: 1
+        material_item:
+          - group_id: 1
+            suffix: A
+          - group_id: 1
+            suffix: B
+
+      input:
+        group_id: 1
+        spec: SUFFIX_RETRY_SPEC_001
+        description: d
+
+    when:
+      action: create_material_replacement
+
+    then:
+      db:
+        material_item:
+          exists:
+            suffix: C
+
+    replay: true
+    deterministic: true
+
+
+  - id: SUFFIX_RETRY_002
+    title: 后缀并发重试耗尽须返回 SUFFIX_ALLOCATION_FAILED（与 CODE_CONFLICT_RETRY 全局编码冲突区分；实现前本用例为契约回声）
+    type: contract
+
+    given:
+      input:
+        value:
+          scenario: retry_exhausted
+          expected_error: SUFFIX_ALLOCATION_FAILED
+          max_attempts: 3
+
+    when:
+      action: echo
+
+    then:
+      output:
+        result:
+          scenario: retry_exhausted
+          expected_error: SUFFIX_ALLOCATION_FAILED
+          max_attempts: 3
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 19. V1.3 — 替代料基准校验（实现 CreateReplacementByCode 后须与之一致）
+# =====================================================
+  - id: REPLACEMENT_ANCHOR_001
+    title: 基准物料 status=0 时禁止创建替代料（预期 ANCHOR_ITEM_DEPRECATED）
+    type: contract_core
+
+    given:
+      db:
+        category:
+          - code: ZDA
+            name: ZDA
+        material_group:
+          - id: 1
+            category_code: ZDA
+            serial_no: 1
+        material_item:
+          - group_id: 1
+            suffix: A
+            status: 0
+            code: ZDA0000001A
+            description: d
+            spec: ANCHOR_DEP_SPEC_A
+            name: n
+            spec_normalized: X
+
+      input:
+        group_id: 1
+        spec: ANCHOR_DEP_SPEC_B
+        description: d2
+
+    when:
+      action: create_material_replacement
+
+    then:
+      error:
+        code: ANCHOR_ITEM_DEPRECATED
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 20. V1.3 — 状态展示与导出排序（契约回声，供 UI/导出实现对照）
+# =====================================================
+  - id: STATUS_DISPLAY_001
+    title: status=0 时展示文案「已废弃」（须与 meta.prd_freeze.status.display 一致）
+    type: contract
+
+    given:
+      input:
+        value:
+          status: 0
+          expected_display: 已废弃
+
+    when:
+      action: echo
+
+    then:
+      output:
+        result:
+          status: 0
+          expected_display: 已废弃
+
+    replay: true
+    deterministic: true
+
+
+  - id: EXPORT_ORDER_001
+    title: 导出与列表排序须按 category_code + serial_no + suffix（禁止仅按 code 字符串）
+    type: contract
+
+    given:
+      input:
+        value:
+          order_by:
+            - category_code
+            - serial_no
+            - suffix
+
+    when:
+      action: echo
+
+    then:
+      output:
+        result:
+          order_by:
+            - category_code
+            - serial_no
+            - suffix
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 21. V1.3 — 错误码契约补齐（contract_only + echo）
+# =====================================================
+  - id: CATEGORY_NOT_FOUND_001
+    title: category_code 不存在时返回 CATEGORY_NOT_FOUND（契约声明：不依赖真实实现）
+    type: contract
+
+    given:
+      input:
+        value:
+          scenario: category_code_not_found
+          expected_error: CATEGORY_NOT_FOUND
+          priority: "先于 suffix 分配"
+
+    when:
+      action: echo
+
+    then:
+      output:
+        result:
+          scenario: category_code_not_found
+          expected_error: CATEGORY_NOT_FOUND
+          priority: "先于 suffix 分配"
 
     replay: true
     deterministic: true

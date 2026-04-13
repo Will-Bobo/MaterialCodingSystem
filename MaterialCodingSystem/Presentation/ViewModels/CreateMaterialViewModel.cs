@@ -256,6 +256,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     {
         if (DecisionState == CreateDecisionState.Searching || DecisionState == CreateDecisionState.HasCandidate)
             return false;
+        if (DecisionState == CreateDecisionState.Success)
+            return false;
         if (DecisionState == CreateDecisionState.NoCandidate || DecisionState == CreateDecisionState.ForcedCreate)
             return true;
         return DecisionState == CreateDecisionState.Idle && KeywordSource == MaterialSearchKeywordSource.None;
@@ -340,6 +342,13 @@ public sealed class CreateMaterialViewModel : ViewModelBase
                 CandidateStateStripBackground = BrushStateStripBgOk;
                 ShowDecisionInfoBar = false;
                 break;
+            case CreateDecisionState.Success:
+                CandidateStateIcon = "✔";
+                CandidateStateMessage = "创建成功";
+                CandidateStateForeground = BrushGreen;
+                CandidateStateStripBackground = BrushStateStripBgOk;
+                ShowDecisionInfoBar = false;
+                break;
             default:
                 CandidateStateIcon = "🔍";
                 CandidateStateMessage = "";
@@ -348,6 +357,18 @@ public sealed class CreateMaterialViewModel : ViewModelBase
                 ShowDecisionInfoBar = false;
                 break;
         }
+    }
+
+    private void ClearCandidatesAndDecisionUi()
+    {
+        CandidateItems.Clear();
+        SelectedCandidate = null;
+        ShowCandidateCardList = false;
+        ShowDecisionInfoBar = false;
+        CandidateLoading = false;
+        CandidateStatus = "";
+        UpdateDecisionPresentation();
+        UseCandidateAsReplacementCommand.RaiseCanExecuteChanged();
     }
 
     private void ScheduleCandidateRefresh()
@@ -537,7 +558,10 @@ public sealed class CreateMaterialViewModel : ViewModelBase
                 UiResourceKeys.Info.CreateMaterialCreateSuccess,
                 res.Data!.Code,
                 res.Data.SpecNormalized);
-            ScheduleCandidateRefresh();
+            // 创建成功后：禁止自动触发候选搜索；清空候选区并强制进入 SUCCESS 态
+            KeywordSource = MaterialSearchKeywordSource.None;
+            ClearCandidatesAndDecisionUi();
+            SetDecisionState(CreateDecisionState.Success);
             return;
         }
 

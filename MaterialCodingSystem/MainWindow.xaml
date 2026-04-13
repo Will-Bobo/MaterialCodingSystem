@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:conv="clr-namespace:MaterialCodingSystem.Presentation.Converters"
         mc:Ignorable="d"
         Title="Material Coding System" Height="720" Width="1020">
     <Window.Resources>
@@ -12,6 +13,8 @@
         <SolidColorBrush x:Key="Brush.Accent.Primary" Color="#2563EB"/>
         <SolidColorBrush x:Key="Brush.Border.Subtle" Color="#E5E7EB"/>
         <SolidColorBrush x:Key="Brush.Overlay.Loading" Color="#99FFFFFF"/>
+        <conv:StatusToTextConverter x:Key="StatusToText"/>
+        <conv:StatusToIsActiveBoolConverter x:Key="StatusToIsActiveBool"/>
 
         <Style TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI"/>
@@ -107,8 +110,17 @@
                                             <ComboBox Style="{StaticResource ModernComboBox}"
                                                       ItemsSource="{Binding CreateMaterial.Categories}"
                                                       SelectedItem="{Binding CreateMaterial.SelectedCategory}"
-                                                      DisplayMemberPath="Code"
-                                                      Margin="0,0,0,8"/>
+                                                      Margin="0,0,0,8">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock>
+                                                            <Run Text="{Binding Code}"/>
+                                                            <Run Text=" - "/>
+                                                            <Run Text="{Binding Name}"/>
+                                                        </TextBlock>
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
                                             <StackPanel Orientation="Horizontal">
                                                 <Button Padding="12,4" Content="刷新" Command="{Binding CreateMaterial.RefreshCategoriesCommand}"/>
                                                 <Button Padding="12,4" Margin="8,0,0,0" Content="新增分类…" Command="{Binding CreateMaterial.OpenAddCategoryCommand}"/>
@@ -146,8 +158,9 @@
                                     <Border BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
                                         <StackPanel>
                                             <TextBlock Text="名称" FontWeight="SemiBold"/>
-                                            <TextBox Style="{StaticResource ModernTextBox}"
-                                                     Margin="0,4,0,0" Text="{Binding CreateMaterial.Name, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock Margin="0,4,0,0"
+                                                       Foreground="{StaticResource Brush.Text.Muted}"
+                                                       Text="{Binding CreateMaterial.SelectedCategory.Name, FallbackValue=（未选择分类）}"/>
                                             <TextBlock Text="品牌" FontWeight="SemiBold" Margin="0,12,0,0"/>
                                             <TextBox Style="{StaticResource ModernTextBox}"
                                                      Margin="0,4,0,0" Text="{Binding CreateMaterial.Brand, UpdateSourceTrigger=PropertyChanged}"/>
@@ -328,7 +341,10 @@
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="编码" Binding="{Binding Code}" Width="180"/>
                                 <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="120"/>
-                                <DataGridTextColumn Header="规格号" Binding="{Binding Spec}" Width="*"/>
+                                <DataGridTextColumn Header="规格号" Binding="{Binding Spec}" Width="200"/>
+                                <DataGridTextColumn Header="规格描述" Binding="{Binding Description}" Width="*"/>
+                                <DataGridTextColumn Header="状态" Width="80"
+                                                    Binding="{Binding Status, Converter={StaticResource StatusToText}}"/>
                                 <DataGridTemplateColumn Header="操作" Width="120">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
@@ -344,56 +360,118 @@
                         <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Foreground="DimGray" Margin="0,4,0,0"
                                    Text="{Binding CreateReplacement.CodeSearchStatus}"/>
 
-                        <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="通过编码定位组"/>
-                        <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="8,4">
-                            <TextBox Style="{StaticResource ModernTextBox}"
-                                     Width="240" Text="{Binding CreateReplacement.ExistingItemCode, UpdateSourceTrigger=PropertyChanged}"/>
-                            <Button Margin="8,0,0,0" Padding="12,4" Content="定位" Command="{Binding CreateReplacement.ResolveGroupCommand}"/>
-                            <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Text="GroupId"/>
-                            <TextBox Style="{StaticResource ModernTextBox}"
-                                     Width="120" Margin="8,0,0,0" Text="{Binding CreateReplacement.GroupId, UpdateSourceTrigger=PropertyChanged}"/>
-                            <Button Margin="8,0,0,0" Padding="12,4" Content="加载组信息" Command="{Binding CreateReplacement.LoadGroupInfoCommand}"/>
-                        </StackPanel>
+                        <!-- 基准编码输入已移除：仅允许从“选用”或“搜索页跳转”进入 -->
 
-                        <TextBlock Grid.Row="4" Grid.Column="1" Margin="8,0,0,4" TextWrapping="Wrap" Foreground="DimGray"
-                                   Text="{Binding CreateReplacement.GroupInfo}"/>
+                        <Border Grid.Row="5" Grid.ColumnSpan="2" Margin="0,10,0,8"
+                                BorderBrush="{StaticResource Brush.Border.Subtle}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Background="#FAFAFA"
+                                Padding="12">
+                            <StackPanel>
+                                <TextBlock FontWeight="SemiBold" Text="已选基准（只读）"/>
+                                <TextBlock Margin="0,4,0,10"
+                                           Foreground="{StaticResource Brush.Text.Muted}" FontSize="11"
+                                           Text="用于确认“基于哪个基准物料”创建替代料，以及将创建的 suffix 归属。"/>
 
-                        <StackPanel Grid.Row="5" Grid.Column="1" Margin="8,4">
-                            <TextBlock FontWeight="Bold" Text="当前替代组"/>
-                            <TextBlock FontWeight="Bold"
-                                       Text="{Binding CreateReplacement.GroupCodeDisplay}"/>
-                            <TextBlock Foreground="DimGray"
-                                       Text="{Binding CreateReplacement.ExistingSuffixDisplay}"/>
-                            <TextBlock Foreground="Orange"
-                                       FontWeight="SemiBold"
-                                       Text="{Binding CreateReplacement.NextSuffixDisplay}"/>
-                        </StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center" Text="规格号(spec)"/>
-                        <StackPanel Grid.Row="6" Grid.Column="1" Margin="8,4">
-                            <TextBox Style="{StaticResource ModernTextBox}"
-                                     Text="{Binding CreateReplacement.Spec, UpdateSourceTrigger=PropertyChanged}"/>
-                            <TextBlock Foreground="Red" Text="{Binding CreateReplacement.SpecFieldError}"/>
-                        </StackPanel>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Foreground="{StaticResource Brush.Text.Muted}" Text="编码"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" FontWeight="Bold"
+                                               Text="{Binding CreateReplacement.MasterCodeDisplay, FallbackValue=（未选择）}"/>
 
-                        <TextBlock Grid.Row="7" Grid.Column="0" VerticalAlignment="Center" Text="规格描述(desc)"/>
-                        <TextBox Style="{StaticResource ModernTextBox}"
-                                 Grid.Row="7" Grid.Column="1" Margin="8,4" Text="{Binding CreateReplacement.Description, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,6,0,0" Foreground="{StaticResource Brush.Text.Muted}" Text="规格号"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,6,0,0"
+                                               Text="{Binding CreateReplacement.AnchorSpec, FallbackValue=—}"/>
 
-                        <TextBlock Grid.Row="8" Grid.Column="0" VerticalAlignment="Center" Text="名称"/>
-                        <TextBox Style="{StaticResource ModernTextBox}"
-                                 Grid.Row="8" Grid.Column="1" Margin="8,4" Text="{Binding CreateReplacement.Name, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,6,0,0" Foreground="{StaticResource Brush.Text.Muted}" Text="规格描述"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" TextWrapping="Wrap"
+                                               Text="{Binding CreateReplacement.AnchorDescription, FallbackValue=—}"/>
 
-                        <TextBlock Grid.Row="9" Grid.Column="0" VerticalAlignment="Center" Text="品牌"/>
-                        <TextBox Style="{StaticResource ModernTextBox}"
-                                 Grid.Row="9" Grid.Column="1" Margin="8,4" Text="{Binding CreateReplacement.Brand, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,6,0,0" Foreground="{StaticResource Brush.Text.Muted}" Text="名称"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,6,0,0"
+                                               Text="{Binding CreateReplacement.CategoryDisplayName, FallbackValue=—}"/>
 
-                        <StackPanel Grid.Row="10" Grid.ColumnSpan="2" Orientation="Vertical" Margin="0,12,0,0">
-                            <TextBlock TextWrapping="Wrap" Foreground="DarkSlateGray" Margin="0,0,0,8"
-                                       Text="{Binding CreateReplacement.ReplacementCreateHint}"/>
-                            <Button Width="140" HorizontalAlignment="Left" Content="创建替代料" Command="{Binding CreateReplacement.CreateCommand}"/>
-                            <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Text="{Binding CreateReplacement.Result}"/>
-                        </StackPanel>
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,6,0,0" Foreground="{StaticResource Brush.Text.Muted}" Text="品牌"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,6,0,0"
+                                               Text="{Binding CreateReplacement.AnchorBrand, FallbackValue=—}"/>
+
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Margin="0,6,0,0" Foreground="{StaticResource Brush.Text.Muted}" Text="Suffix"/>
+                                    <StackPanel Grid.Row="5" Grid.Column="1" Margin="0,6,0,0">
+                                        <TextBlock Foreground="DimGray"
+                                                   Text="{Binding CreateReplacement.ExistingSuffixDisplay}"/>
+                                        <TextBlock Foreground="Orange"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding CreateReplacement.NextSuffixDisplay}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Row="6" Grid.ColumnSpan="2" Margin="0,0,0,12"
+                                Background="White"
+                                BorderBrush="{StaticResource Brush.Border.Subtle}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.ColumnSpan="2" FontWeight="SemiBold" Text="新建替代料"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,10,0,0" VerticalAlignment="Center" Text="规格号(spec)"/>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,10,0,0">
+                                    <TextBox Style="{StaticResource ModernTextBox}"
+                                             Text="{Binding CreateReplacement.Spec, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Foreground="Red" Text="{Binding CreateReplacement.SpecFieldError}"/>
+                                </StackPanel>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8,0,0" VerticalAlignment="Center" Text="规格描述(desc)"/>
+                                <TextBox Style="{StaticResource ModernTextBox}"
+                                         Grid.Row="2" Grid.Column="1" Margin="8,8,0,0"
+                                         Text="{Binding CreateReplacement.Description, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8,0,0" VerticalAlignment="Center" Text="名称"/>
+                                <TextBlock Grid.Row="3" Grid.Column="1" Margin="8,8,0,0"
+                                           Foreground="{StaticResource Brush.Text.Muted}"
+                                           Text="{Binding CreateReplacement.CategoryDisplayName, FallbackValue=（请先选择基准物料）}"/>
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,8,0,0" VerticalAlignment="Center" Text="品牌"/>
+                                <TextBox Style="{StaticResource ModernTextBox}"
+                                         Grid.Row="4" Grid.Column="1" Margin="8,8,0,0"
+                                         Text="{Binding CreateReplacement.Brand, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Orientation="Vertical" Margin="0,12,0,0">
+                                    <TextBlock TextWrapping="Wrap" Foreground="DarkSlateGray" Margin="0,0,0,8"
+                                               Text="{Binding CreateReplacement.ReplacementCreateHint}"/>
+                                    <Button Width="140" HorizontalAlignment="Left" Content="创建替代料" Command="{Binding CreateReplacement.CreateCommand}"/>
+                                    <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Text="{Binding CreateReplacement.Result}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
                     </Grid>
                 </ScrollViewer>
             </TabItem>
@@ -433,12 +511,20 @@
                             <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="150"/>
                             <DataGridTextColumn Header="规格号" Binding="{Binding Spec}" Width="*"/>
                             <DataGridTextColumn Header="品牌" Binding="{Binding Brand}" Width="120"/>
-                            <DataGridTemplateColumn Header="操作" Width="160">
+                            <DataGridTextColumn Header="状态" Width="80"
+                                                Binding="{Binding Status, Converter={StaticResource StatusToText}}"/>
+                            <DataGridTemplateColumn Header="操作" Width="220">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <Button Content="作为替代料" Padding="10,2"
-                                                Command="{Binding DataContext.Search.AddCodeHitAsReplacementCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                                CommandParameter="{Binding}"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="作为替代料" Padding="10,2"
+                                                    Command="{Binding DataContext.Search.AddCodeHitAsReplacementCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Margin="8,0,0,0" Content="废弃" Padding="10,2"
+                                                    IsEnabled="{Binding Status, Converter={StaticResource StatusToIsActiveBool}}"
+                                                    Command="{Binding DataContext.Search.DeprecateCodeHitCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                    CommandParameter="{Binding}"/>
+                                        </StackPanel>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
@@ -460,7 +546,17 @@
                                           Width="200"
                                           ItemsSource="{Binding Search.Categories}"
                                           SelectedItem="{Binding Search.SelectedCategory}"
-                                          DisplayMemberPath="Code"/>
+                                          >
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock>
+                                                <Run Text="{Binding Code}"/>
+                                                <Run Text=" - "/>
+                                                <Run Text="{Binding Name}"/>
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                                 <Button Margin="8,0,0,0" Padding="12,4" Content="刷新" Command="{Binding Search.RefreshCategoriesCommand}"/>
                             </StackPanel>
                             <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="关键字"/>
@@ -480,12 +576,20 @@
                             <DataGridTextColumn Header="规格描述" Binding="{Binding Description}" Width="*"/>
                             <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="140"/>
                             <DataGridTextColumn Header="品牌" Binding="{Binding Brand}" Width="120"/>
-                            <DataGridTemplateColumn Header="操作" Width="160">
+                            <DataGridTextColumn Header="状态" Width="80"
+                                                Binding="{Binding Status, Converter={StaticResource StatusToText}}"/>
+                            <DataGridTemplateColumn Header="操作" Width="220">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <Button Content="作为替代料" Padding="10,2"
-                                                Command="{Binding DataContext.Search.AddSpecHitAsReplacementCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                                CommandParameter="{Binding}"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="作为替代料" Padding="10,2"
+                                                    Command="{Binding DataContext.Search.AddSpecHitAsReplacementCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Margin="8,0,0,0" Content="废弃" Padding="10,2"
+                                                    IsEnabled="{Binding Status, Converter={StaticResource StatusToIsActiveBool}}"
+                                                    Command="{Binding DataContext.Search.DeprecateSpecHitCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                    CommandParameter="{Binding}"/>
+                                        </StackPanel>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
@@ -493,16 +597,12 @@
                     </DataGrid>
 
                     <StackPanel Grid.Row="6" Orientation="Horizontal" Margin="0,12,0,0" VerticalAlignment="Center">
-                        <Button Content="选中项作为替代料（跳转）" Padding="12,4" Command="{Binding Search.AddSelectedAsReplacementCommand}"/>
-                        <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Text="{Binding Search.Message}"/>
+                        <TextBlock VerticalAlignment="Center" Text="{Binding Search.Message}"/>
                     </StackPanel>
 
                     <StackPanel Grid.Row="7" Orientation="Horizontal" Margin="0,12,0,0" VerticalAlignment="Center">
-                        <TextBlock VerticalAlignment="Center" Text="废弃编码"/>
-                        <TextBox Style="{StaticResource ModernTextBox}"
-                                 Width="220" Margin="8,0" Text="{Binding Deprecate.Code, UpdateSourceTrigger=PropertyChanged}"/>
-                        <Button Content="废弃" Padding="12,4" Command="{Binding Deprecate.DeprecateCommand}"/>
-                        <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Text="{Binding Deprecate.Result}"/>
+                        <TextBlock VerticalAlignment="Center" Foreground="{StaticResource Brush.Text.Muted}"
+                                   Text="提示：请在表格行内点击“废弃”，已废弃行将禁用。"/>
                     </StackPanel>
                 </Grid>
             </TabItem>
