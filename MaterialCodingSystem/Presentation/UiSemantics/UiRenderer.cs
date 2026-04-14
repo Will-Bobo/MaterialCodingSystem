@@ -13,6 +13,8 @@ public interface IUiRenderer
 
     bool ConfirmDuplicateCreate();
 
+    bool ConfirmCreateMaterial(CreateMaterialConfirmModel model);
+
     Task<bool> ConfirmDeprecateAsync(DeprecateConfirmModel model);
 }
 
@@ -32,6 +34,22 @@ public sealed class WpfUiRenderer : IUiRenderer
         var r = System.Windows.MessageBox.Show(
             UiResources.Get(UiResourceKeys.Confirm.DuplicateBody),
             UiResources.Get(UiResourceKeys.Confirm.DuplicateTitle),
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Question);
+        return r == System.Windows.MessageBoxResult.Yes;
+    }
+
+    public bool ConfirmCreateMaterial(CreateMaterialConfirmModel model)
+    {
+        var body =
+            $"规格号：{model.Spec}\n" +
+            $"规格描述：{model.Description}\n" +
+            $"名称：{model.Name}\n" +
+            $"品牌：{model.Brand}";
+
+        var r = System.Windows.MessageBox.Show(
+            body,
+            "确认创建主物料",
             System.Windows.MessageBoxButton.YesNo,
             System.Windows.MessageBoxImage.Question);
         return r == System.Windows.MessageBoxResult.Yes;

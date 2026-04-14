@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Media;
 using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Contracts;
+using MaterialCodingSystem.Presentation.Models;
 using MaterialCodingSystem.Presentation.Scheduling;
 using MaterialCodingSystem.Presentation.UiSemantics;
 
@@ -35,6 +36,30 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     private bool _hasExactSpecMatch;
     public bool HasExactSpecMatch { get => _hasExactSpecMatch; private set => SetProperty(ref _hasExactSpecMatch, value); }
 
+    private (string CategoryCode, string SpecTrim)? _allowedKey;
+
+    public bool IsForceCreateAllowed
+    {
+        get
+        {
+            var key = _allowedKey;
+            if (key is null)
+                return false;
+            var category = SelectedCategory?.Code?.Trim() ?? "";
+            var specTrim = Spec?.Trim() ?? "";
+            return string.Equals(key.Value.CategoryCode, category, StringComparison.Ordinal)
+                && string.Equals(key.Value.SpecTrim, specTrim, StringComparison.Ordinal);
+        }
+    }
+
+    private CreateMaterialState _state = CreateMaterialState.Empty;
+    public CreateMaterialState State { get => _state; private set => SetProperty(ref _state, value); }
+
+    public bool HasCandidates => CandidateItems.Count > 0;
+
+    public bool ShowAllowCreatePanel =>
+        State == CreateMaterialState.CandidateConflict && !HasExactSpecMatch;
+
     private CategoryDto? _selectedCategory;
     public CategoryDto? SelectedCategory
     {
@@ -42,7 +67,10 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         set
         {
             if (SetProperty(ref _selectedCategory, value))
+            {
+                RefreshDerivedState();
                 ScheduleCandidateRefresh();
+            }
         }
     }
 
@@ -91,6 +119,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
                     ScheduleCandidateRefresh();
                 UpdateSpecInputStateHint();
                 RecomputeHasExactSpecMatch();
+                RefreshDerivedState();
             }
         }
     }
@@ -101,7 +130,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         get => _description;
         set
         {
-            SetProperty(ref _description, value);
+            if (SetProperty(ref _description, value))
+                RefreshDerivedState();
         }
     }
 
@@ -109,7 +139,47 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     public string Name { get => _name; set => SetProperty(ref _name, value); }
 
     private string _brand = "";
-    public string Brand { get => _brand; set => SetProperty(ref _brand, value); }
+    public string Brand
+    {
+        get => _brand;
+        set
+        {
+            if (SetProperty(ref _brand, value))
+                RefreshDerivedState();
+        }
+    }
+
+    private CreateMaterialState ComputeState()
+    {
+        var specTrim = Spec?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(specTrim))
+            return CreateMaterialState.Empty;
+
+        // 1) 完全匹配：最高优先级，硬阻断
+        if (HasExactSpecMatch)
+            return CreateMaterialState.CandidateConflict;
+
+        // 2) 规格描述/品牌必填：第二优先级，硬阻断
+        if (string.IsNullOrWhiteSpace(Description?.Trim()) || string.IsNullOrWhiteSpace(Brand?.Trim()))
+            return CreateMaterialState.MissingRequiredFields;
+
+        // 3) 软冲突：存在候选且未允许 → 冲突态（需要“允许新建”）
+        if (HasCandidates && !IsForceCreateAllowed)
+            return CreateMaterialState.CandidateConflict;
+
+        // 4) 其他：可创建（唯一正向态）
+        return CreateMaterialState.ReadyToCreate;
+    }
+
+    private void RefreshDerivedState()
+    {
+        // 单一真相：任何 UI 行为只依赖 State + 派生 flags
+        State = ComputeState();
+        NotifyPropertyChanged(nameof(IsForceCreateAllowed));
+        NotifyPropertyChanged(nameof(HasCandidates));
+        NotifyPropertyChanged(nameof(ShowAllowCreatePanel));
+        CreateCommand.RaiseCanExecuteChanged();
+    }
 
     private string _result = "";
     public string Result { get => _result; set => SetProperty(ref _result, value); }
@@ -214,7 +284,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         _navigateToReplacementFromCandidate = navigateToReplacementFromCandidate;
         _openAddCategoryDialog = openAddCategoryDialog;
 
-        CreateCommand = new RelayCommand(async () => await CreateAsync(), CanExecuteCreate);
+        CreateCommand = new RelayCommand(async () => await CreateWithConfirmAsync(), CanExecuteCreate);
         RefreshCategoriesCommand = new RelayCommand(async () => await RefreshCategoriesAsync());
         OpenAddCategoryCommand = new RelayCommand(async () => await OpenAddCategoryAsync());
         UseCandidateAsReplacementCommand = new RelayCommand<CandidateItemViewModel>(
@@ -234,14 +304,23 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         ForceCreateWithConfirmCommand = new RelayCommand(
             () =>
             {
-                if (!_uiRenderer.ConfirmDuplicateCreate())
+                // 仅允许新建：记录 AllowedKey（分类+SpecTrim），不触发创建
+                if (State != CreateMaterialState.CandidateConflict)
                     return;
-                SetDecisionState(CreateDecisionState.ForcedCreate);
+                if (HasExactSpecMatch)
+                    return;
+                var category = SelectedCategory?.Code?.Trim() ?? "";
+                var specTrim = Spec?.Trim() ?? "";
+                if (string.IsNullOrWhiteSpace(category) || string.IsNullOrWhiteSpace(specTrim))
+                    return;
+                _allowedKey = (category, specTrim);
+                RefreshDerivedState();
             },
             () => DecisionState == CreateDecisionState.HasCandidate && !HasExactSpecMatch);
 
         UpdateSpecInputStateHint();
         UpdateDecisionPresentation();
+        RefreshDerivedState();
         _ = RefreshCategoriesAsync();
     }
 
@@ -267,13 +346,11 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
     private bool CanExecuteCreate()
     {
-        if (DecisionState == CreateDecisionState.Searching || DecisionState == CreateDecisionState.HasCandidate)
-            return false;
         if (DecisionState == CreateDecisionState.Success)
             return false;
-        if (DecisionState == CreateDecisionState.NoCandidate || DecisionState == CreateDecisionState.ForcedCreate)
-            return true;
-        return DecisionState == CreateDecisionState.Idle && KeywordSource == MaterialSearchKeywordSource.None;
+        if (CandidateLoading)
+            return false;
+        return State == CreateMaterialState.ReadyToCreate;
     }
 
     private bool SetDecisionState(CreateDecisionState value)
@@ -382,6 +459,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         CandidateStatus = "";
         UpdateDecisionPresentation();
         UseCandidateAsReplacementCommand.RaiseCanExecuteChanged();
+        RefreshDerivedState();
     }
 
     private void ScheduleCandidateRefresh()
@@ -404,6 +482,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             Spec = "";
             Description = "";
             Brand = "";
+            _allowedKey = null;
         }
         finally
         {
@@ -521,6 +600,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
                 CandidateItems.Add(new CandidateItemViewModel(x, keyword));
 
             RecomputeHasExactSpecMatch();
+            RefreshDerivedState();
 
             if (res.Data.Items.Count > 0)
             {
@@ -579,6 +659,23 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         UpdateDecisionPresentation();
     }
 
+    private async Task CreateWithConfirmAsync()
+    {
+        // 仅 UI 确认：不改业务逻辑
+        var model = new CreateMaterialConfirmModel
+        {
+            Spec = Spec?.Trim() ?? "",
+            Description = Description?.Trim() ?? "",
+            Name = SelectedCategory?.Name ?? "",
+            Brand = Brand?.Trim() ?? ""
+        };
+
+        if (!_uiRenderer.ConfirmCreateMaterial(model))
+            return;
+
+        await CreateAsync();
+    }
+
     private async Task CreateAsync()
     {
         ClearCreateMaterialSubmitFeedback();
@@ -609,6 +706,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             ClearCandidatesAndDecisionUi();
             SetDecisionState(CreateDecisionState.Success);
             ClearInputsAfterSuccess();
+            RefreshDerivedState();
             return;
         }
 

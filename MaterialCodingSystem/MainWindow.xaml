@@ -208,27 +208,62 @@
                                 <TextBlock Text="候选决策" Style="{StaticResource TitleText}"/>
                             </StackPanel>
 
-                            <Border Grid.Row="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8"
-                                    Background="{Binding CreateMaterial.CandidateStateStripBackground}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding CreateMaterial.CandidateStateIcon}" FontSize="18" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding CreateMaterial.CandidateStateMessage}" FontWeight="SemiBold"
-                                                   Foreground="{Binding CreateMaterial.CandidateStateForeground}"/>
-                                        <TextBlock FontSize="11" Foreground="{StaticResource Brush.Text.Muted}" TextWrapping="Wrap" Margin="0,4,0,0"
-                                                   Text="{Binding CreateMaterial.CandidateStateSubMessage}">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding CreateMaterial.CandidateStateSubMessage}" Value="">
-                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                    </StackPanel>
+                            <Border Grid.Row="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="{StaticResource Brush.Border.Subtle}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CreateMaterial.State}" Value="CandidateConflict">
+                                                <Setter Property="Background" Value="#FEF3C7"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding CreateMaterial.State}" Value="MissingRequiredFields">
+                                                <Setter Property="Background" Value="#FEF3C7"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding CreateMaterial.State}" Value="ReadyToCreate">
+                                                <Setter Property="Background" Value="#ECFDF5"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <StackPanel>
+                                    <TextBlock TextWrapping="Wrap" FontWeight="SemiBold">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush.Primary}"/>
+                                                <Setter Property="Text" Value=""/>
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding CreateMaterial.State}" Value="CandidateConflict"/>
+                                                            <Condition Binding="{Binding CreateMaterial.HasExactSpecMatch}" Value="True"/>
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Foreground" Value="#B45309"/>
+                                                        <Setter Property="Text" Value="已存在完全相同规格物料，请使用替代料。"/>
+                                                    </MultiDataTrigger>
+
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding CreateMaterial.State}" Value="CandidateConflict"/>
+                                                            <Condition Binding="{Binding CreateMaterial.HasExactSpecMatch}" Value="False"/>
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Foreground" Value="#B45309"/>
+                                                        <Setter Property="Text" Value="检测到相似物料，如仍需新建请点击“允许新建”。"/>
+                                                    </MultiDataTrigger>
+
+                                                    <DataTrigger Binding="{Binding CreateMaterial.State}" Value="MissingRequiredFields">
+                                                        <Setter Property="Foreground" Value="#B45309"/>
+                                                        <Setter Property="Text" Value="⚠ 规格描述、品牌为必填项，请补充后再创建。"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding CreateMaterial.State}" Value="Empty">
+                                                        <Setter Property="Text" Value="请输入规格号开始查重。"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding CreateMaterial.State}" Value="ReadyToCreate">
+                                                        <Setter Property="Text" Value="已满足创建条件，请点击“创建主物料”。"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </StackPanel>
                             </Border>
 
@@ -236,7 +271,7 @@
                                     BorderThickness="1"
                                     Background="{Binding CreateMaterial.DecisionInfoBarBackground}"
                                     BorderBrush="{Binding CreateMaterial.DecisionInfoBarBorderBrush}"
-                                    Visibility="{Binding CreateMaterial.ShowDecisionInfoBar, Converter={StaticResource BoolToVis}}">
+                                    Visibility="{Binding CreateMaterial.ShowAllowCreatePanel, Converter={StaticResource BoolToVis}}">
                                 <StackPanel>
                                     <Grid>
                                     <Grid.ColumnDefinitions>
@@ -251,7 +286,7 @@
                                                 Style="{StaticResource PrimaryButton}"
                                                 Command="{Binding CreateMaterial.UseCandidateAsReplacementCommand}"
                                                 CommandParameter="{Binding CreateMaterial.SelectedCandidate}"/>
-                                        <Button Content="仍然新建"
+                                        <Button Content="允许新建（下一步点击创建）"
                                                 Margin="8,0,0,0"
                                                 Padding="12,6"
                                                 Command="{Binding CreateMaterial.ForceCreateWithConfirmCommand}"
@@ -260,15 +295,19 @@
                                     </Grid>
 
                                     <TextBlock Margin="0,6,0,0"
-                                               Foreground="Orange"
                                                FontSize="11"
-                                               Text="检测到规格号完全相同的物料，禁止新建，请作为替代料处理。">
+                                               TextWrapping="Wrap">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Muted}"/>
+                                                <Setter Property="Text" Value=""/>
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding CreateMaterial.HasExactSpecMatch}" Value="True">
-                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    <DataTrigger Binding="{Binding CreateMaterial.State}" Value="MissingRequiredFields">
+                                                        <Setter Property="Foreground" Value="Orange"/>
+                                                        <Setter Property="Text" Value="⚠ 规格描述、品牌为必填项，请补充后再创建。"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding CreateMaterial.IsForceCreateAllowed}" Value="True">
+                                                        <Setter Property="Text" Value="已允许新建。"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
