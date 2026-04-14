@@ -7,6 +7,10 @@ param(
 
   [string]$Project = "MaterialCodingSystem\\MaterialCodingSystem.csproj",
 
+  # Required when the project multi-targets (TargetFrameworks).
+  # Default publishes the WPF app.
+  [string]$Framework = "net8.0-windows",
+
   [string]$PackageVersion,
 
   [switch]$IncludePdb
@@ -31,13 +35,14 @@ $appName = [IO.Path]::GetFileNameWithoutExtension($projPath)
 $distRoot = Join-Path $root "dist"
 New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
 
-$publishDir = Join-Path $distRoot ("{0}-publish-{1}" -f $appName, $Configuration)
+$publishDir = Join-Path $distRoot ("{0}-publish-{1}-{2}" -f $appName, $Framework, $Configuration)
 if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
 New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 
 $publishArgs = @(
   "publish", $projPath,
   "-c", $Configuration,
+  "-f", $Framework,
   "-t:$Target",
   "-o", $publishDir
 )
@@ -55,7 +60,7 @@ $version =
   else { "unknown" }
 $safeVersion = ($version -replace '[^\w\.\-]+','_')
 
-$zipPath = Join-Path $distRoot ("{0}-{1}-{2}.zip" -f $appName, $safeVersion, $Configuration)
+$zipPath = Join-Path $distRoot ("{0}-{1}-{2}-{3}.zip" -f $appName, $safeVersion, $Framework, $Configuration)
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zipPath -Force
 

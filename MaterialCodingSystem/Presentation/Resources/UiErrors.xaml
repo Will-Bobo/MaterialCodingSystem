@@ -17,4 +17,5 @@
     <sys:String x:Key="Error.Replacement.ResolveFailed">无法定位物料组。</sys:String>
     <sys:String x:Key="Error.Replacement.GroupInfoFailed">无法加载组信息。</sys:String>
     <sys:String x:Key="Error.Replacement.EmbeddedSearchFailed">编码搜索失败。</sys:String>
+    <sys:String x:Key="Error.Export.FileInUse">无法覆盖导出文件：目标文件正被其他程序打开（例如 Excel）。请关闭该文件或另存为新路径后重试。</sys:String>
 </ResourceDictionary>

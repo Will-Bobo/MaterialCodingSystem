@@ -73,14 +73,13 @@ VALUES
             Assert.Equal(3, wb.Worksheets.Count);
             Assert.NotNull(wb.Worksheet("全量"));
             var zda = wb.Worksheet("ZDA");
-            // columns: code, category_code, name, spec, description, brand, status
+            // columns: code, name, description, spec, brand, status
             Assert.Equal("ZDA0000001A", zda.Cell(2, 1).GetString());
-            Assert.Equal("ZDA", zda.Cell(2, 2).GetString());
-            Assert.Equal("R", zda.Cell(2, 3).GetString()); // name from category
+            Assert.Equal("R", zda.Cell(2, 2).GetString()); // name from category
+            Assert.Equal("d1", zda.Cell(2, 3).GetString());
             Assert.Equal("S1", zda.Cell(2, 4).GetString());
-            Assert.Equal("d1", zda.Cell(2, 5).GetString());
-            Assert.Equal("", zda.Cell(2, 6).GetString());
-            Assert.Equal("正常", zda.Cell(2, 7).GetString());
+            Assert.Equal("", zda.Cell(2, 5).GetString());
+            Assert.Equal("正常", zda.Cell(2, 6).GetString());
         }
         finally
         {

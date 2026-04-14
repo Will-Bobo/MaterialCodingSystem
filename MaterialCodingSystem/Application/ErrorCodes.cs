@@ -15,5 +15,7 @@ public static class ErrorCodes
     public const string CATEGORY_CODE_DUPLICATE = "CATEGORY_CODE_DUPLICATE";
     public const string CATEGORY_NAME_DUPLICATE = "CATEGORY_NAME_DUPLICATE";
     public const string INTERNAL_ERROR = "INTERNAL_ERROR";
+    /// <summary>导出目标文件被占用，无法覆盖（例如 Excel 正打开该文件）。</summary>
+    public const string EXPORT_FILE_IN_USE = "EXPORT_FILE_IN_USE";
 }
 

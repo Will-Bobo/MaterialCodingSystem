@@ -32,6 +32,9 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     public ObservableCollection<CategoryDto> Categories { get; } = new();
     public ObservableCollection<MaterialItemSpecHit> CandidateItems { get; } = new();
 
+    private bool _hasExactSpecMatch;
+    public bool HasExactSpecMatch { get => _hasExactSpecMatch; private set => SetProperty(ref _hasExactSpecMatch, value); }
+
     private CategoryDto? _selectedCategory;
     public CategoryDto? SelectedCategory
     {
@@ -80,6 +83,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             {
                 ScheduleCandidateRefresh();
                 UpdateSpecInputStateHint();
+                RecomputeHasExactSpecMatch();
             }
         }
     }
@@ -228,7 +232,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
                     return;
                 SetDecisionState(CreateDecisionState.ForcedCreate);
             },
-            () => DecisionState == CreateDecisionState.HasCandidate);
+            () => DecisionState == CreateDecisionState.HasCandidate && !HasExactSpecMatch);
 
         UpdateSpecInputStateHint();
         UpdateDecisionPresentation();
@@ -394,6 +398,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             SelectedCandidate = null;
             CandidateLoading = false;
             CandidateStatus = "";
+            HasExactSpecMatch = false;
             TrySetIdleIfBothInputsEmpty();
             CreateCommand.RaiseCanExecuteChanged();
             UpdateDecisionPresentation();
@@ -406,6 +411,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             SelectedCandidate = null;
             CandidateLoading = false;
             CandidateStatus = UiResources.Get(UiResourceKeys.Info.CandidatePickCategoryAndKeyword);
+            HasExactSpecMatch = false;
             TrySetIdleIfBothInputsEmpty();
             CreateCommand.RaiseCanExecuteChanged();
             UpdateDecisionPresentation();
@@ -419,6 +425,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             SelectedCandidate = null;
             CandidateLoading = false;
             CandidateStatus = "";
+            HasExactSpecMatch = false;
             TrySetIdleIfBothInputsEmpty();
             CreateCommand.RaiseCanExecuteChanged();
             UpdateDecisionPresentation();
@@ -436,6 +443,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         CandidateItems.Clear();
         SelectedCandidate = null;
         CandidateStatus = "";
+        HasExactSpecMatch = false;
 
         if (KeywordSource == MaterialSearchKeywordSource.None)
         {
@@ -487,6 +495,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             foreach (var x in res.Data!.Items)
                 CandidateItems.Add(x);
 
+            RecomputeHasExactSpecMatch();
+
             if (res.Data.Items.Count > 0)
             {
                 CandidateStatus = UiResources.Format(UiResourceKeys.Info.CandidatePossibleDuplicateTop20, res.Data.Items.Count);
@@ -504,8 +514,19 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             CandidateLoading = false;
             CreateCommand.RaiseCanExecuteChanged();
             UseCandidateAsReplacementCommand.RaiseCanExecuteChanged();
+            ForceCreateWithConfirmCommand.RaiseCanExecuteChanged();
             UpdateDecisionPresentation();
         }
+    }
+
+    private void RecomputeHasExactSpecMatch()
+    {
+        var spec = Spec?.Trim() ?? "";
+        HasExactSpecMatch =
+            !string.IsNullOrWhiteSpace(spec)
+            && CandidateItems.Any(x =>
+                string.Equals(x.Spec?.Trim(), spec, StringComparison.OrdinalIgnoreCase));
+        ForceCreateWithConfirmCommand.RaiseCanExecuteChanged();
     }
 
     private async Task OpenAddCategoryAsync()

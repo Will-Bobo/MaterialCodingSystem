@@ -1,3 +1,4 @@
+using System.IO;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
 using MaterialCodingSystem.Domain.Entities;
@@ -629,7 +630,17 @@ public sealed class MaterialApplicationService
         {
             // PRD V1.3：Sheet1=全量（含废弃）；分类 Sheet 同样包含全部数据
             var rows = await _repo.ListAllItemsForExportAsync(ct);
-            await _excelExporter.WriteAsync(filePath, rows, ct);
+            try
+            {
+                await _excelExporter.WriteAsync(filePath, rows, ct);
+            }
+            catch (IOException ex) when (IsExportTargetFileInUse(ex))
+            {
+                return Result<ExportMaterialsResponse>.Fail(
+                    ErrorCodes.EXPORT_FILE_IN_USE,
+                    "export target file is in use and cannot be overwritten");
+            }
+
             // UI 文案：{2} 个分类 Sheet（不包含 Sheet1；无数据时也为 0）
             var sheetCount = rows.Select(r => r.CategoryCode).Distinct().Count();
             return Result<ExportMaterialsResponse>.Ok(new ExportMaterialsResponse(
@@ -637,6 +648,19 @@ public sealed class MaterialApplicationService
                 RowCount: rows.Count,
                 SheetCount: sheetCount));
         }, ct);
+    }
+
+    /// <summary>目标文件被其他进程占用（如 Excel 已打开），ClosedXML 保存时会失败。</summary>
+    private static bool IsExportTargetFileInUse(IOException ex)
+    {
+        // Win32 ERROR_SHARING_VIOLATION → HRESULT 0x80070020（与 FileSystem.DeleteFile 一致）
+        const int sharingViolationHResult = unchecked((int)0x80070020);
+        if (ex.HResult == sharingViolationHResult)
+            return true;
+        // 兜底：英文/部分本地化消息
+        return ex.Message.Contains("another process", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("另一个程序", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("正由另一进程", StringComparison.OrdinalIgnoreCase);
     }
 }
 

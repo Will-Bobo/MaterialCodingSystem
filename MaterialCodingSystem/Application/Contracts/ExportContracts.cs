@@ -1,6 +1,6 @@
 namespace MaterialCodingSystem.Application.Contracts;
 
-/// <summary>PRD 7.4 导出行（JOIN material_group 后排序用字段）。</summary>
+/// <summary>导出行：仓储 JOIN category；Excel 仅输出 Code/Name/Description/Spec/Brand/Status，CategoryCode/SerialNo/Suffix 用于排序与分 Sheet。</summary>
 public sealed record MaterialExportRow(
     string Code,
     string Spec,

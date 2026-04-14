@@ -97,6 +97,7 @@ public static class UiResourceKeys
         public const string ReplacementResolveFailed = "Error.Replacement.ResolveFailed";
         public const string ReplacementGroupInfoFailed = "Error.Replacement.GroupInfoFailed";
         public const string ReplacementEmbeddedSearchFailed = "Error.Replacement.EmbeddedSearchFailed";
+        public const string ExportFileInUse = "Error.Export.FileInUse";
     }
 
     public static class Dialog

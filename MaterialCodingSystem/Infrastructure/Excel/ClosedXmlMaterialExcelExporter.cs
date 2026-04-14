@@ -38,12 +38,11 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
     private static void WriteHeader(IXLWorksheet ws)
     {
         ws.Cell(1, 1).Value = "编码";
-        ws.Cell(1, 2).Value = "分类编码";
-        ws.Cell(1, 3).Value = "名称";
+        ws.Cell(1, 2).Value = "名称";
+        ws.Cell(1, 3).Value = "规格描述";
         ws.Cell(1, 4).Value = "规格号";
-        ws.Cell(1, 5).Value = "规格描述";
-        ws.Cell(1, 6).Value = "品牌";
-        ws.Cell(1, 7).Value = "状态";
+        ws.Cell(1, 5).Value = "品牌";
+        ws.Cell(1, 6).Value = "状态";
     }
 
     private static void WriteRows(IXLWorksheet ws, IEnumerable<MaterialExportRow> rows)
@@ -63,12 +62,11 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
         {
             var statusText = item.Status == 1 ? "正常" : "已废弃";
             ws.Cell(row, 1).Value = item.Code;
-            ws.Cell(row, 2).Value = item.CategoryCode;
-            ws.Cell(row, 3).Value = item.Name;
+            ws.Cell(row, 2).Value = item.Name;
+            ws.Cell(row, 3).Value = item.Description;
             ws.Cell(row, 4).Value = item.Spec;
-            ws.Cell(row, 5).Value = item.Description;
-            ws.Cell(row, 6).Value = item.Brand ?? "";
-            var statusCell = ws.Cell(row, 7);
+            ws.Cell(row, 5).Value = item.Brand ?? "";
+            var statusCell = ws.Cell(row, 6);
             statusCell.Value = statusText;
             statusCell.Style.Font.FontColor = item.Status == 1 ? ok : bad;
             row++;
@@ -83,10 +81,10 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
 
     private static void AutoFit(IXLWorksheet ws)
     {
-        ws.Columns(1, 7).AdjustToContents();
-        // 导出优化：确保分类/名称列可读（最小宽度兜底）
-        if (ws.Column(2).Width < 20) ws.Column(2).Width = 20;
-        if (ws.Column(3).Width < 25) ws.Column(3).Width = 25;
+        ws.Columns(1, 6).AdjustToContents();
+        // 导出优化：名称 / 规格描述列可读（最小宽度兜底）
+        if (ws.Column(2).Width < 25) ws.Column(2).Width = 25;
+        if (ws.Column(3).Width < 20) ws.Column(3).Width = 20;
     }
 
     private static string SanitizeSheetName(string name)

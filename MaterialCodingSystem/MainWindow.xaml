@@ -16,6 +16,7 @@
         <conv:StatusToTextConverter x:Key="StatusToText"/>
         <conv:StatusToIsActiveBoolConverter x:Key="StatusToIsActiveBool"/>
         <conv:StatusToBrushConverter x:Key="StatusToBrush"/>
+        <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVis"/>
 
         <Style TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI"/>
@@ -64,7 +65,18 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
             <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
-            <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="False"/>
+            <!-- 性能：候选项多时开启虚拟化 + 回收，提升滚动流畅度 -->
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/>
+            <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel"/>
+            <Setter Property="ItemsPanel">
+                <Setter.Value>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                    </ItemsPanelTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style x:Key="CandidateListBoxItem" TargetType="ListBoxItem">
             <Setter Property="Padding" Value="0"/>
@@ -224,7 +236,8 @@
                                     Background="{Binding CreateMaterial.DecisionInfoBarBackground}"
                                     BorderBrush="{Binding CreateMaterial.DecisionInfoBarBorderBrush}"
                                     Visibility="{Binding CreateMaterial.ShowDecisionInfoBar, Converter={StaticResource BoolToVis}}">
-                                <Grid>
+                                <StackPanel>
+                                    <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
@@ -240,9 +253,27 @@
                                         <Button Content="仍然新建"
                                                 Margin="8,0,0,0"
                                                 Padding="12,6"
-                                                Command="{Binding CreateMaterial.ForceCreateWithConfirmCommand}"/>
+                                                Command="{Binding CreateMaterial.ForceCreateWithConfirmCommand}"
+                                                Visibility="{Binding CreateMaterial.HasExactSpecMatch, Converter={StaticResource InverseBoolToVis}}"/>
                                     </StackPanel>
-                                </Grid>
+                                    </Grid>
+
+                                    <TextBlock Margin="0,6,0,0"
+                                               Foreground="Orange"
+                                               FontSize="11"
+                                               Text="检测到规格号完全相同的物料，禁止新建，请作为替代料处理。">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding CreateMaterial.HasExactSpecMatch}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
                             </Border>
 
                             <Grid Grid.Row="3" Margin="0,0,0,0">
@@ -632,7 +663,7 @@
             <TabItem Header="导出 Excel">
                 <StackPanel Margin="24">
                     <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
-                               Text="导出当前库中所有 status=1 的物料；按分类分 Sheet；列：编码、名称、规格描述、规格号、品牌。"/>
+                               Text="导出当前库中的全部物料（含已废弃）；按分类分 Sheet；列：编码、名称、规格描述、规格号、品牌、状态。"/>
                     <Button HorizontalAlignment="Left" Width="200" Padding="12,8" Content="导出到 Excel…" Command="{Binding Export.ExportCommand}"/>
                     <TextBlock Margin="0,16,0,0" TextWrapping="Wrap" Text="{Binding Export.Result}"/>
                 </StackPanel>

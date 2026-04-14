@@ -69,6 +69,10 @@ public static class UiPolicy
                 error.Code, context, UiSeverity.Warning, UiPresentation.Inline,
                 UiResourceKeys.Error.ValidationError, UiBindings.Error),
 
+            (ErrorCodes.EXPORT_FILE_IN_USE, ContextType.Export) => Plan(
+                error.Code, context, UiSeverity.Warning, UiPresentation.Banner,
+                UiResourceKeys.Error.ExportFileInUse, UiBindings.Result),
+
             (ErrorCodes.INTERNAL_ERROR, _) => Plan(
                 error.Code, context, UiSeverity.Error, UiPresentation.Banner,
                 UiResourceKeys.Error.InternalError, DefaultBindProperty(context)),
@@ -185,6 +189,7 @@ public static class UiPolicy
             ErrorCodes.NOT_FOUND => UiResourceKeys.Error.NotFound,
             ErrorCodes.INVALID_QUERY => UiResourceKeys.Error.InvalidQuery,
             ErrorCodes.INTERNAL_ERROR => UiResourceKeys.Error.InternalError,
+            ErrorCodes.EXPORT_FILE_IN_USE => UiResourceKeys.Error.ExportFileInUse,
             _ => UiResourceKeys.Error.GenericFailure
         };
 
