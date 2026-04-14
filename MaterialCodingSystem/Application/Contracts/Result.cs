@@ -1,6 +1,10 @@
 namespace MaterialCodingSystem.Application.Contracts;
 
-public sealed record AppError(string Code, string Message);
+public sealed record AppError(
+    string Code,
+    string Message,
+    IReadOnlyDictionary<string, string>? ValidationErrors = null
+);
 
 public sealed class Result<T>
 {
@@ -17,5 +21,7 @@ public sealed class Result<T>
 
     public static Result<T> Ok(T data) => new(true, data, null);
     public static Result<T> Fail(string code, string message) => new(false, default, new AppError(code, message));
+    public static Result<T> Fail(string code, string message, IReadOnlyDictionary<string, string> validationErrors) =>
+        new(false, default, new AppError(code, message, validationErrors));
 }
 

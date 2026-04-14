@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Contracts;
+using MaterialCodingSystem.Presentation.Models;
 using MaterialCodingSystem.Presentation.UiSemantics;
 
 namespace MaterialCodingSystem.Presentation.ViewModels;
@@ -67,8 +68,19 @@ public sealed class CreateReplacementViewModel : ViewModelBase
     private string _result = "";
     public string Result { get => _result; set => SetProperty(ref _result, value); }
 
-    private string _specFieldError = "";
-    public string SpecFieldError { get => _specFieldError; set => SetProperty(ref _specFieldError, value); }
+    // 唯一字段错误真源：AppError.ValidationErrors（VM 不复制/不缓存）
+    private AppError? _lastError;
+    public AppError? LastError
+    {
+        get => _lastError;
+        private set
+        {
+            if (SetProperty(ref _lastError, value))
+                NotifyPropertyChanged(nameof(HasError));
+        }
+    }
+
+    public bool HasError => LastError is not null;
 
     private string _replacementCreateHint = "";
     public string ReplacementCreateHint { get => _replacementCreateHint; set => SetProperty(ref _replacementCreateHint, value); }
@@ -216,26 +228,62 @@ public sealed class CreateReplacementViewModel : ViewModelBase
 
     private async Task CreateAsync()
     {
-        SpecFieldError = "";
+        LastError = null;
         Result = UiResources.Get(UiResourceKeys.Info.ReplacementProcessing);
         IsSubmitting = true;
         CreateCommand.RaiseCanExecuteChanged();
         try
         {
+            // 先做本地必填项校验：为空时先提示，不进入最终确认弹窗（避免“先确认后报错”的体验）
+            var localErrors = new Dictionary<string, string>();
+            if (string.IsNullOrWhiteSpace(Spec))
+                localErrors["spec"] = "规格号不能为空。";
+            if (string.IsNullOrWhiteSpace(Description))
+                localErrors["description"] = "规格描述不能为空。";
+            if (string.IsNullOrWhiteSpace(Brand))
+                localErrors["brand"] = "品牌不能为空。";
+            if (string.IsNullOrWhiteSpace(_baseMaterialCode))
+                localErrors["base_material_code"] = "请先选择基准物料。";
+
+            if (localErrors.Count > 0)
+            {
+                LastError = new AppError(ErrorCodes.VALIDATION_ERROR, "validation error.", localErrors);
+                Result = "输入无效：请先补全必填项。";
+                return;
+            }
+
+            var ok = _uiRenderer.ConfirmCreateReplacement(new CreateReplacementConfirmModel
+            {
+                BaseMaterialCode = _baseMaterialCode,
+                BaseSpec = AnchorSpec,
+                BaseDescription = AnchorDescription,
+                BaseBrand = AnchorBrand,
+                Spec = Spec,
+                Description = Description,
+                Brand = Brand
+            });
+            if (!ok)
+            {
+                Result = "已取消。";
+                return;
+            }
+
             var res = await _app.CreateReplacementByCode(new CreateReplacementByCodeRequest(
                 BaseMaterialCode: _baseMaterialCode,
                 Spec: Spec,
                 Description: Description,
-                Brand: string.IsNullOrWhiteSpace(Brand) ? null : Brand
+                Brand: Brand
             ));
 
             if (res.IsSuccess)
             {
+                LastError = null;
                 Result = UiResources.Format(UiResourceKeys.Info.ReplacementCreateSuccess, res.Data!.Code, res.Data.Suffix);
                 await LoadAnchorInfoCoreAsync();
                 return;
             }
 
+            LastError = res.Error;
             var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.CreateReplacementCreate);
             _uiDispatcher.Apply(plan, this);
         }
@@ -245,4 +293,11 @@ public sealed class CreateReplacementViewModel : ViewModelBase
             CreateCommand.RaiseCanExecuteChanged();
         }
     }
+
+    // UI 绑定桥接：不允许直接绑定 AppError.ValidationErrors（避免强耦合）
+    // WPF Binding 不支持带参方法调用，因此提供 indexer 供 XAML 使用：Text="{Binding CreateReplacement[spec]}"
+    public string? GetError(string key) =>
+        LastError?.ValidationErrors is { } d && d.TryGetValue(key, out var msg) ? msg : null;
+
+    public string? this[string key] => GetError(key);
 }

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Presentation.Models;
+using MaterialCodingSystem.Presentation.Services;
 
 namespace MaterialCodingSystem.Presentation.UiSemantics;
 
@@ -15,11 +16,20 @@ public interface IUiRenderer
 
     bool ConfirmCreateMaterial(CreateMaterialConfirmModel model);
 
+    bool ConfirmCreateReplacement(CreateReplacementConfirmModel model);
+
     Task<bool> ConfirmDeprecateAsync(DeprecateConfirmModel model);
 }
 
 public sealed class WpfUiRenderer : IUiRenderer
 {
+    private readonly IUiDialogService _dialogs;
+
+    public WpfUiRenderer(IUiDialogService dialogs)
+    {
+        _dialogs = dialogs;
+    }
+
     public void LogTechnicalFailure(AppError error) =>
         Trace.WriteLine($"[MCS] {error.Code}: {error.Message}");
 
@@ -31,12 +41,9 @@ public sealed class WpfUiRenderer : IUiRenderer
 
     public bool ConfirmDuplicateCreate()
     {
-        var r = System.Windows.MessageBox.Show(
-            UiResources.Get(UiResourceKeys.Confirm.DuplicateBody),
+        return _dialogs.Confirm(
             UiResources.Get(UiResourceKeys.Confirm.DuplicateTitle),
-            System.Windows.MessageBoxButton.YesNo,
-            System.Windows.MessageBoxImage.Question);
-        return r == System.Windows.MessageBoxResult.Yes;
+            UiResources.Get(UiResourceKeys.Confirm.DuplicateBody));
     }
 
     public bool ConfirmCreateMaterial(CreateMaterialConfirmModel model)
@@ -47,12 +54,22 @@ public sealed class WpfUiRenderer : IUiRenderer
             $"名称：{model.Name}\n" +
             $"品牌：{model.Brand}";
 
-        var r = System.Windows.MessageBox.Show(
-            body,
-            "确认创建主物料",
-            System.Windows.MessageBoxButton.YesNo,
-            System.Windows.MessageBoxImage.Question);
-        return r == System.Windows.MessageBoxResult.Yes;
+        return _dialogs.Confirm("确认创建主物料", body);
+    }
+
+    public bool ConfirmCreateReplacement(CreateReplacementConfirmModel model)
+    {
+        var body =
+            $"基准编码：{model.BaseMaterialCode}\n" +
+            $"基准规格号：{model.BaseSpec}\n" +
+            $"基准规格描述：{model.BaseDescription}\n" +
+            $"基准品牌：{model.BaseBrand}\n" +
+            "\n" +
+            $"替代料规格号：{model.Spec}\n" +
+            $"替代料规格描述：{model.Description}\n" +
+            $"替代料品牌：{model.Brand}";
+
+        return _dialogs.Confirm("确认创建替代料", body);
     }
 
     public Task<bool> ConfirmDeprecateAsync(DeprecateConfirmModel model)

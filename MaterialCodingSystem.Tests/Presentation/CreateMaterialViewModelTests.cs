@@ -46,6 +46,8 @@ public sealed class CreateMaterialViewModelTests
 
         public bool ConfirmCreateMaterial(CreateMaterialConfirmModel model) => true;
 
+        public bool ConfirmCreateReplacement(CreateReplacementConfirmModel model) => true;
+
         public Task<bool> ConfirmDeprecateAsync(DeprecateConfirmModel model) => Task.FromResult(true);
     }
 

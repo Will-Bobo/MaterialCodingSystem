@@ -262,9 +262,23 @@ public sealed class MaterialApplicationService
     public Task<Result<CreateReplacementResponse>> CreateReplacement(CreateReplacementRequest req, CancellationToken ct = default)
         => ExecuteWithRetry(async () =>
         {
+            var validationErrors = new Dictionary<string, string>();
             if (string.IsNullOrWhiteSpace(req.Description))
             {
-                return Result<CreateReplacementResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "description is required.");
+                validationErrors["description"] = "规格描述不能为空。";
+            }
+
+            if (string.IsNullOrWhiteSpace(req.Brand))
+            {
+                validationErrors["brand"] = "品牌不能为空。";
+            }
+
+            if (validationErrors.Count > 0)
+            {
+                return Result<CreateReplacementResponse>.Fail(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "validation error.",
+                    validationErrors);
             }
 
             Spec spec;
@@ -274,7 +288,10 @@ public sealed class MaterialApplicationService
             }
             catch (DomainException ex) when (ex.Code == "VALIDATION_ERROR")
             {
-                return Result<CreateReplacementResponse>.Fail(ErrorCodes.VALIDATION_ERROR, ex.Message);
+                return Result<CreateReplacementResponse>.Fail(
+                    ErrorCodes.VALIDATION_ERROR,
+                    ex.Message,
+                    new Dictionary<string, string> { ["spec"] = ex.Message });
             }
 
             var snap = await _repo.GetGroupSnapshotAsync(req.GroupId, ct);
@@ -298,7 +315,10 @@ public sealed class MaterialApplicationService
             var specExists = await _repo.SpecExistsAsync(snap.CategoryCode, spec, ct);
             if (specExists)
             {
-                return Result<CreateReplacementResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
+                return Result<CreateReplacementResponse>.Fail(
+                    ErrorCodes.SPEC_DUPLICATE,
+                    "spec duplicate.",
+                    new Dictionary<string, string> { ["spec"] = "规格号已存在。" });
             }
 
             // suffix 连续性与 overflow 规则交由 Domain（PRD V1）
@@ -379,14 +399,28 @@ public sealed class MaterialApplicationService
     public Task<Result<CreateReplacementResponse>> CreateReplacementByCode(CreateReplacementByCodeRequest req, CancellationToken ct = default)
         => ExecuteWithRetry(async () =>
         {
+            var validationErrors = new Dictionary<string, string>();
             if (string.IsNullOrWhiteSpace(req.BaseMaterialCode))
             {
-                return Result<CreateReplacementResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "base_material_code is required.");
+                validationErrors["base_material_code"] = "基准物料编码不能为空。";
             }
 
             if (string.IsNullOrWhiteSpace(req.Description))
             {
-                return Result<CreateReplacementResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "description is required.");
+                validationErrors["description"] = "规格描述不能为空。";
+            }
+
+            if (string.IsNullOrWhiteSpace(req.Brand))
+            {
+                validationErrors["brand"] = "品牌不能为空。";
+            }
+
+            if (validationErrors.Count > 0)
+            {
+                return Result<CreateReplacementResponse>.Fail(
+                    ErrorCodes.VALIDATION_ERROR,
+                    "validation error.",
+                    validationErrors);
             }
 
             Spec spec;
@@ -396,7 +430,10 @@ public sealed class MaterialApplicationService
             }
             catch (DomainException ex) when (ex.Code == "VALIDATION_ERROR")
             {
-                return Result<CreateReplacementResponse>.Fail(ErrorCodes.VALIDATION_ERROR, ex.Message);
+                return Result<CreateReplacementResponse>.Fail(
+                    ErrorCodes.VALIDATION_ERROR,
+                    ex.Message,
+                    new Dictionary<string, string> { ["spec"] = ex.Message });
             }
 
             // 1) base code 是否存在
@@ -436,7 +473,10 @@ public sealed class MaterialApplicationService
             var specExists = await _repo.SpecExistsAsync(snap.CategoryCode, spec, ct);
             if (specExists)
             {
-                return Result<CreateReplacementResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
+                return Result<CreateReplacementResponse>.Fail(
+                    ErrorCodes.SPEC_DUPLICATE,
+                    "spec duplicate.",
+                    new Dictionary<string, string> { ["spec"] = "规格号已存在。" });
             }
 
             // 6) 才允许进入 suffix 分配（连续性/overflow）

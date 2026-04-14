@@ -30,6 +30,7 @@ public partial class App : System.Windows.Application
         var prefsPath = Path.Combine(dataDir, "preferences.json");
 
         sc.AddSingleton<IExportPathPreferenceStore>(_ => new JsonExportPathPreferenceStore(prefsPath));
+        sc.AddSingleton<IUiDialogService, WpfUiDialogService>();
         sc.AddSingleton<IUiRenderer, WpfUiRenderer>();
         sc.AddSingleton<IUiDispatcher, WpfUiDispatcher>();
         sc.AddSingleton<IFileSaveDialog, WpfSaveExcelFileDialog>();

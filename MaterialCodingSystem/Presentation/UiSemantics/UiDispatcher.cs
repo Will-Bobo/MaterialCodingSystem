@@ -1,5 +1,5 @@
-using System.Windows;
 using System.Windows.Threading;
+using MaterialCodingSystem.Presentation.Services;
 using MaterialCodingSystem.Presentation.ViewModels;
 
 namespace MaterialCodingSystem.Presentation.UiSemantics;
@@ -11,9 +11,15 @@ public interface IUiDispatcher
 
 public sealed class WpfUiDispatcher : IUiDispatcher
 {
+    private readonly IUiDialogService _dialogs;
     private DispatcherTimer? _toastTimer;
     private object? _toastHost;
     private string? _toastProperty;
+
+    public WpfUiDispatcher(IUiDialogService dialogs)
+    {
+        _dialogs = dialogs;
+    }
 
     public void Apply(UiRenderPlan plan, object host)
     {
@@ -39,20 +45,12 @@ public sealed class WpfUiDispatcher : IUiDispatcher
 
     private static string ResolveText(string resourceKey) => UiResources.Get(resourceKey);
 
-    private static void ShowModal(UiModalPlan m)
+    private void ShowModal(UiModalPlan m)
     {
         var body = ResolveText(m.BodyResourceKey);
         var title = ResolveText(m.TitleResourceKey);
-        MessageBox.Show(body, title, MessageBoxButton.OK, MapIcon(m.Severity));
+        _dialogs.ShowMessage(title, body, m.Severity);
     }
-
-    private static MessageBoxImage MapIcon(UiSeverity s) =>
-        s switch
-        {
-            UiSeverity.Error => MessageBoxImage.Error,
-            UiSeverity.Warning => MessageBoxImage.Warning,
-            _ => MessageBoxImage.Information
-        };
 
     private static void ApplyClearStrategy(object host, UiClearStrategy s)
     {
@@ -105,7 +103,6 @@ public sealed class WpfUiDispatcher : IUiDispatcher
         switch (s)
         {
             case UiClearStrategy.CreateReplacementSubmit:
-                cr.SpecFieldError = "";
                 cr.Result = "";
                 break;
             case UiClearStrategy.CreateReplacementResultOnly:
@@ -196,9 +193,6 @@ public sealed class WpfUiDispatcher : IUiDispatcher
     {
         switch (propertyName)
         {
-            case UiBindings.SpecFieldError:
-                vm.SpecFieldError = text;
-                break;
             case UiBindings.Result:
                 vm.Result = text;
                 break;

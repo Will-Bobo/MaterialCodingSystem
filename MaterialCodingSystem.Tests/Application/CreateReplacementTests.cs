@@ -47,7 +47,7 @@ public class CreateReplacementTests
             Spec: "NEW",
             Name: "\t",
             Description: "d2",
-            Brand: null
+            Brand: "b2"
         ));
 
         Assert.True(res.IsSuccess);
@@ -66,12 +66,13 @@ public class CreateReplacementTests
             Spec: "NEW",
             Name: "n2",
             Description: "   ",
-            Brand: null
+            Brand: "b2"
         ));
 
         Assert.False(res.IsSuccess);
         Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error!.Code);
-        Assert.Equal("description is required.", res.Error.Message);
+        Assert.NotNull(res.Error.ValidationErrors);
+        Assert.True(res.Error.ValidationErrors!.ContainsKey("description"));
     }
 
     [Fact]

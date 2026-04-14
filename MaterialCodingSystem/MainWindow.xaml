@@ -504,6 +504,7 @@
                                 <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="120"/>
                                 <DataGridTextColumn Header="规格号" Binding="{Binding Spec}" Width="200"/>
                                 <DataGridTextColumn Header="规格描述" Binding="{Binding Description}" Width="*"/>
+                                <DataGridTextColumn Header="品牌" Binding="{Binding Brand}" Width="120"/>
                                 <DataGridTextColumn Header="状态" Width="80"
                                                     Binding="{Binding Status, Converter={StaticResource StatusToText}}">
                                     <DataGridTextColumn.ElementStyle>
@@ -614,13 +615,17 @@
                                 <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,10,0,0">
                                     <TextBox Style="{StaticResource ModernTextBox}"
                                              Text="{Binding CreateReplacement.Spec, UpdateSourceTrigger=PropertyChanged}"/>
-                                    <TextBlock Foreground="Red" Text="{Binding CreateReplacement.SpecFieldError}"/>
+                                    <TextBlock Foreground="Red" FontWeight="SemiBold"
+                                               Text="{Binding CreateReplacement[spec], Mode=OneWay}"/>
                                 </StackPanel>
 
                                 <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8,0,0" VerticalAlignment="Center" Text="规格描述(desc)"/>
-                                <TextBox Style="{StaticResource ModernTextBox}"
-                                         Grid.Row="2" Grid.Column="1" Margin="8,8,0,0"
-                                         Text="{Binding CreateReplacement.Description, UpdateSourceTrigger=PropertyChanged}"/>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Margin="8,8,0,0">
+                                    <TextBox Style="{StaticResource ModernTextBox}"
+                                             Text="{Binding CreateReplacement.Description, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Foreground="Red" FontWeight="SemiBold"
+                                               Text="{Binding CreateReplacement[description], Mode=OneWay}"/>
+                                </StackPanel>
 
                                 <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8,0,0" VerticalAlignment="Center" Text="名称"/>
                                 <TextBlock Grid.Row="3" Grid.Column="1" Margin="8,8,0,0"
@@ -628,15 +633,35 @@
                                            Text="{Binding CreateReplacement.CategoryDisplayName, FallbackValue=（请先选择基准物料）}"/>
 
                                 <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,8,0,0" VerticalAlignment="Center" Text="品牌"/>
-                                <TextBox Style="{StaticResource ModernTextBox}"
-                                         Grid.Row="4" Grid.Column="1" Margin="8,8,0,0"
-                                         Text="{Binding CreateReplacement.Brand, UpdateSourceTrigger=PropertyChanged}"/>
+                                <StackPanel Grid.Row="4" Grid.Column="1" Margin="8,8,0,0">
+                                    <TextBox Style="{StaticResource ModernTextBox}"
+                                             Text="{Binding CreateReplacement.Brand, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Foreground="Red" FontWeight="SemiBold"
+                                               Text="{Binding CreateReplacement[brand], Mode=OneWay}"/>
+                                </StackPanel>
 
                                 <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Orientation="Vertical" Margin="0,12,0,0">
                                     <TextBlock TextWrapping="Wrap" Foreground="DarkSlateGray" Margin="0,0,0,8"
                                                Text="{Binding CreateReplacement.ReplacementCreateHint}"/>
                                     <Button Width="140" HorizontalAlignment="Left" Content="创建替代料" Command="{Binding CreateReplacement.CreateCommand}"/>
-                                    <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Text="{Binding CreateReplacement.Result}"/>
+                                    <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Text="{Binding CreateReplacement.Result}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="DarkSlateGray"/>
+                                                <Setter Property="Background" Value="{x:Null}"/>
+                                                <Setter Property="Padding" Value="0"/>
+                                                <Setter Property="FontWeight" Value="Normal"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding CreateReplacement.HasError}" Value="True">
+                                                        <Setter Property="Foreground" Value="#B91C1C"/>
+                                                        <Setter Property="Background" Value="#FEE2E2"/>
+                                                        <Setter Property="Padding" Value="8,6"/>
+                                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </StackPanel>
                             </Grid>
                         </Border>

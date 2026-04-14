@@ -15,7 +15,11 @@ public static class UiPolicy
 
             (ErrorCodes.SPEC_DUPLICATE, ContextType.CreateReplacementCreate) => Plan(
                 error.Code, context, UiSeverity.Warning, UiPresentation.Inline,
-                UiResourceKeys.Error.SpecDuplicate, UiBindings.SpecFieldError),
+                UiResourceKeys.Error.SpecDuplicate, UiBindings.Result),
+
+            (ErrorCodes.VALIDATION_ERROR, ContextType.CreateReplacementCreate) => Plan(
+                error.Code, context, UiSeverity.Warning, UiPresentation.Inline,
+                UiResourceKeys.Error.ValidationError, UiBindings.Result),
 
             (ErrorCodes.CODE_CONFLICT_RETRY, ContextType.CreateMaterialCreate) => Plan(
                 error.Code, context, UiSeverity.Warning, UiPresentation.Banner,
