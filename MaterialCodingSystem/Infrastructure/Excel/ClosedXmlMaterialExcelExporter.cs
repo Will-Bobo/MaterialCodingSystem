@@ -85,6 +85,8 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
         // 导出优化：名称 / 规格描述列可读（最小宽度兜底）
         if (ws.Column(2).Width < 25) ws.Column(2).Width = 25;
         if (ws.Column(3).Width < 20) ws.Column(3).Width = 20;
+        // 状态列：避免“正常/已废弃”显示拥挤
+        if (ws.Column(6).Width < 12) ws.Column(6).Width = 12;
     }
 
     private static string SanitizeSheetName(string name)
