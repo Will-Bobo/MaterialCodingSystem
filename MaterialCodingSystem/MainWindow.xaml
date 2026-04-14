@@ -341,11 +341,26 @@
                                                             <TextBlock Text="规格:"
                                                                     FontSize="11"
                                                                     Foreground="{StaticResource Brush.Text.Muted}"/>
-
-                                                            <TextBlock Text="{Binding Spec}"
-                                                                    Margin="4,0,0,0"
-                                                                    FontWeight="SemiBold"
-                                                                    Foreground="{StaticResource Brush.Primary}"/>
+                                                            <TextBlock Margin="4,0,0,0" Foreground="{StaticResource Brush.Primary}">
+                                                                <Run Text="{Binding SpecPrefix, Mode=OneWay}"/>
+                                                                <Run Text="{Binding SpecMatch, Mode=OneWay}">
+                                                                    <Run.Style>
+                                                                        <Style TargetType="Run">
+                                                                            <Setter Property="Background" Value="Transparent"/>
+                                                                            <Setter Property="Foreground" Value="{StaticResource Brush.Primary}"/>
+                                                                            <Setter Property="FontWeight" Value="Normal"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding HasMatch}" Value="True">
+                                                                                    <Setter Property="Background" Value="#FEE2E2"/>
+                                                                                    <Setter Property="Foreground" Value="#DC2626"/>
+                                                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Run.Style>
+                                                                </Run>
+                                                                <Run Text="{Binding SpecSuffix, Mode=OneWay}"/>
+                                                            </TextBlock>
                                                         </StackPanel>
 
                                                         <!-- 第三行：Description -->

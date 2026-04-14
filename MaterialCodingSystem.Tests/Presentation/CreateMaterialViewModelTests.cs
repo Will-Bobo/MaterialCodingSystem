@@ -76,6 +76,7 @@ public sealed class CreateMaterialViewModelTests
         Assert.Single(vm.CandidateItems);
         Assert.Equal("PART", repo.LastSearchCandidatesBySpecOnlyKeyword);
         Assert.Equal("ZDA", repo.LastSearchCandidatesBySpecOnlyCategoryCode);
+        Assert.Equal("PART", vm.CandidateItems[0].SpecMatch);
     }
 
     [Fact]

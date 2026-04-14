@@ -30,7 +30,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     private readonly Func<Task> _openAddCategoryDialog;
 
     public ObservableCollection<CategoryDto> Categories { get; } = new();
-    public ObservableCollection<MaterialItemSpecHit> CandidateItems { get; } = new();
+    public ObservableCollection<CandidateItemViewModel> CandidateItems { get; } = new();
 
     private bool _hasExactSpecMatch;
     public bool HasExactSpecMatch { get => _hasExactSpecMatch; private set => SetProperty(ref _hasExactSpecMatch, value); }
@@ -66,8 +66,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
     public bool ShowDecisionBar => DecisionState == CreateDecisionState.HasCandidate;
 
-    private MaterialItemSpecHit? _selectedCandidate;
-    public MaterialItemSpecHit? SelectedCandidate
+    private CandidateItemViewModel? _selectedCandidate;
+    public CandidateItemViewModel? SelectedCandidate
     {
         get => _selectedCandidate;
         set
@@ -184,8 +184,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     public RelayCommand CreateCommand { get; }
     public RelayCommand RefreshCategoriesCommand { get; }
     public RelayCommand OpenAddCategoryCommand { get; }
-    public RelayCommand<MaterialItemSpecHit> UseCandidateAsReplacementCommand { get; }
-    public RelayCommand<MaterialItemSpecHit> SelectCandidateCommand { get; }
+    public RelayCommand<CandidateItemViewModel> UseCandidateAsReplacementCommand { get; }
+    public RelayCommand<CandidateItemViewModel> SelectCandidateCommand { get; }
     public RelayCommand ForceCreateWithConfirmCommand { get; }
 
     public CreateMaterialViewModel(
@@ -217,14 +217,14 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         CreateCommand = new RelayCommand(async () => await CreateAsync(), CanExecuteCreate);
         RefreshCategoriesCommand = new RelayCommand(async () => await RefreshCategoriesAsync());
         OpenAddCategoryCommand = new RelayCommand(async () => await OpenAddCategoryAsync());
-        UseCandidateAsReplacementCommand = new RelayCommand<MaterialItemSpecHit>(
+        UseCandidateAsReplacementCommand = new RelayCommand<CandidateItemViewModel>(
             async hit =>
             {
                 if (hit is not null)
-                    await _navigateToReplacementFromCandidate(hit);
+                    await _navigateToReplacementFromCandidate(hit.Source);
             },
             hit => hit is not null);
-        SelectCandidateCommand = new RelayCommand<MaterialItemSpecHit>(
+        SelectCandidateCommand = new RelayCommand<CandidateItemViewModel>(
             hit =>
             {
                 if (hit is not null)
@@ -518,7 +518,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             }
 
             foreach (var x in res.Data!.Items)
-                CandidateItems.Add(x);
+                CandidateItems.Add(new CandidateItemViewModel(x, keyword));
 
             RecomputeHasExactSpecMatch();
 
