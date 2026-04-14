@@ -336,6 +336,48 @@ LIMIT 20;";
         return new PagedResult<MaterialItemSpecHit>(Total: items.Count, Items: items);
     }
 
+    public async Task<PagedResult<MaterialItemSpecHit>> SearchCandidatesBySpecOnlyAsync(
+        string categoryCode,
+        string keyword,
+        int limit,
+        CancellationToken ct = default)
+    {
+        // 候选收敛：仅 spec LIKE；固定 status=1；排序可复现（用于回归）。
+        var sql = @"
+SELECT
+  mi.code AS Code,
+  mi.spec AS Spec,
+  mi.description AS Description,
+  mi.name AS Name,
+  mi.brand AS Brand,
+  mi.status AS Status,
+  mi.group_id AS GroupId
+FROM material_item mi
+JOIN material_group mg ON mi.group_id = mg.id
+WHERE mi.category_code = @categoryCode
+  AND mi.status = 1
+  AND mi.spec LIKE '%' || @keyword || '%'
+ORDER BY
+  CASE
+    WHEN LOWER(TRIM(mi.spec)) = LOWER(TRIM(@keyword)) THEN 0
+    WHEN mi.spec LIKE '%' || @keyword || '%' THEN 1
+    ELSE 2
+  END,
+  mg.serial_no,
+  mi.suffix,
+  mi.code
+LIMIT @limit;";
+
+        var items = (await _connection.QueryAsync<MaterialItemSpecHit>(new CommandDefinition(
+            sql,
+            new { categoryCode, keyword, limit },
+            transaction: Tx,
+            cancellationToken: ct
+        ))).ToList();
+
+        return new PagedResult<MaterialItemSpecHit>(Total: items.Count, Items: items);
+    }
+
     public async Task<PagedResult<MaterialItemSpecHit>> SearchBySpecAllAsync(string keyword, bool includeDeprecated, int limit, CancellationToken ct = default)
     {
         var statusFilter = includeDeprecated ? "" : "AND mi.status = 1";

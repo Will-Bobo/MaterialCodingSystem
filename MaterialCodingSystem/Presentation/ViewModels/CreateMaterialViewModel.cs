@@ -47,13 +47,17 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     }
 
     private MaterialSearchKeywordSource _keywordSource = MaterialSearchKeywordSource.None;
+    private bool _suppressCandidateRefresh;
     public MaterialSearchKeywordSource KeywordSource
     {
         get => _keywordSource;
         set
         {
             if (SetProperty(ref _keywordSource, value))
-                ScheduleCandidateRefresh();
+            {
+                if (!_suppressCandidateRefresh)
+                    ScheduleCandidateRefresh();
+            }
         }
     }
 
@@ -81,7 +85,10 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         {
             if (SetProperty(ref _spec, value))
             {
-                ScheduleCandidateRefresh();
+                if (!_suppressCandidateRefresh && KeywordSource == MaterialSearchKeywordSource.None)
+                    KeywordSource = MaterialSearchKeywordSource.Spec;
+                if (!_suppressCandidateRefresh)
+                    ScheduleCandidateRefresh();
                 UpdateSpecInputStateHint();
                 RecomputeHasExactSpecMatch();
             }
@@ -94,8 +101,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         get => _description;
         set
         {
-            if (SetProperty(ref _description, value))
-                ScheduleCandidateRefresh();
+            SetProperty(ref _description, value);
         }
     }
 
@@ -241,7 +247,10 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
     public void NotifySpecFieldFocused() => KeywordSource = MaterialSearchKeywordSource.Spec;
 
-    public void NotifyDescriptionFieldFocused() => KeywordSource = MaterialSearchKeywordSource.Description;
+    // 候选收敛：描述框 focus 不应影响候选区（不切换 keyword source、不触发刷新/清空）
+    public void NotifyDescriptionFieldFocused()
+    {
+    }
 
     private void UpdateSpecInputStateHint()
     {
@@ -377,11 +386,29 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
     private void ScheduleCandidateRefresh()
     {
+        if (_suppressCandidateRefresh)
+            return;
         if (DecisionState == CreateDecisionState.ForcedCreate)
             SetDecisionState(CreateDecisionState.Searching);
 
         PrimeSearchingStateIfApplicable();
         _debouncer.Debounce(CandidateDebounceKey, TimeSpan.FromMilliseconds(300), RefreshCandidatesCoreAsync);
+    }
+
+    private void ClearInputsAfterSuccess()
+    {
+        _suppressCandidateRefresh = true;
+        try
+        {
+            // 清空输入，便于再次录入；保留分类选择以提升录入效率
+            Spec = "";
+            Description = "";
+            Brand = "";
+        }
+        finally
+        {
+            _suppressCandidateRefresh = false;
+        }
     }
 
     private void TrySetIdleIfBothInputsEmpty()
@@ -418,7 +445,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             return;
         }
 
-        var keyword = KeywordSource == MaterialSearchKeywordSource.Spec ? Spec : Description;
+        var keyword = Spec;
         if (string.IsNullOrWhiteSpace(keyword))
         {
             CandidateItems.Clear();
@@ -454,7 +481,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             return;
         }
 
-        var keyword = KeywordSource == MaterialSearchKeywordSource.Spec ? Spec : Description;
+        var keyword = Spec;
         var categoryCode = SelectedCategory?.Code?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(categoryCode) || string.IsNullOrWhiteSpace(keyword))
         {
@@ -475,13 +502,11 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
         try
         {
-            var res = await _app.SearchBySpec(new SearchQuery(
-                CodeKeyword: null,
-                SpecKeyword: keyword.Trim(),
-                CategoryCode: categoryCode,
-                IncludeDeprecated: false,
-                Limit: 20,
-                Offset: 0));
+            var res = await _app.SearchCandidatesBySpecOnlyAsync(
+                categoryCode: categoryCode,
+                keyword: keyword.Trim(),
+                limit: 20,
+                ct: ct);
 
             if (!res.IsSuccess)
             {
@@ -583,6 +608,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             KeywordSource = MaterialSearchKeywordSource.None;
             ClearCandidatesAndDecisionUi();
             SetDecisionState(CreateDecisionState.Success);
+            ClearInputsAfterSuccess();
             return;
         }
 

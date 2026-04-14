@@ -29,7 +29,7 @@ public sealed class SearchViewModel : ViewModelBase
         set => SetProperty(ref _selectedCategory, value);
     }
 
-    private bool _includeDeprecated;
+    private bool _includeDeprecated = true;
     public bool IncludeDeprecated { get => _includeDeprecated; set => SetProperty(ref _includeDeprecated, value); }
 
     public ObservableCollection<MaterialItemSummary> CodeResults { get; } = new();

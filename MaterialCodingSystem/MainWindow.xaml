@@ -7,6 +7,7 @@
         mc:Ignorable="d"
         Title="Material Coding System" Height="720" Width="1020">
     <Window.Resources>
+        <SolidColorBrush x:Key="Brush.Primary" Color="#2563EB"/>
         <SolidColorBrush x:Key="Brush.App.Background" Color="#F3F3F3"/>
         <SolidColorBrush x:Key="Brush.Field.Error" Color="#DC2626"/>
         <SolidColorBrush x:Key="Brush.Text.Muted" Color="#6B7280"/>
@@ -103,8 +104,8 @@
             <TabItem Header="新建主物料(A)">
                 <Grid Background="{StaticResource Brush.App.Background}">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="340"/>
-                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="2*" MinWidth="380"/>
+                        <ColumnDefinition Width="3*" MinWidth="520"/>
                     </Grid.ColumnDefinitions>
 
                     <Border Grid.Column="0" Style="{StaticResource CardStyle}">
@@ -143,7 +144,7 @@
 
                                     <Border BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
                                         <StackPanel>
-                                            <TextBlock Text="规格号 (Spec)" FontWeight="SemiBold"/>
+                                            <TextBlock Text="规格号（型号）" FontWeight="SemiBold"/>
                                             <TextBlock Foreground="{StaticResource Brush.Text.Muted}" FontSize="11" Margin="0,4,0,0" Text="填写供应商型号（如 CL10A106KP8NNNC）"/>
                                             <TextBox Style="{StaticResource ModernTextBox}"
                                                      GotFocus="SpecField_OnGotFocus"
@@ -246,7 +247,7 @@
                                     <TextBlock Grid.Column="0" Text="⚠" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center" Foreground="{StaticResource Brush.Accent.Primary}"/>
                                     <TextBlock Grid.Column="1" Text="请选择处理方式" VerticalAlignment="Center" TextWrapping="Wrap"/>
                                     <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                        <Button Content="作为替代料"
+                                        <Button Content="生成替代料"
                                                 Style="{StaticResource PrimaryButton}"
                                                 Command="{Binding CreateMaterial.UseCandidateAsReplacementCommand}"
                                                 CommandParameter="{Binding CreateMaterial.SelectedCandidate}"/>
@@ -285,27 +286,101 @@
                                          Visibility="{Binding CreateMaterial.ShowCandidateCardList, Converter={StaticResource BoolToVis}}">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Style="{StaticResource CandidateCardStyle}" Margin="0">
-                                                <StackPanel>
-                                                    <TextBlock Text="{Binding Code}" FontWeight="Bold" FontSize="14"/>
-                                                    <TextBlock Margin="0,6,0,0" Foreground="{StaticResource Brush.Text.Muted}"
-                                                               Text="{Binding DataContext.CreateMaterial.CandidateSimilarityPlaceholder, RelativeSource={RelativeSource AncestorType=Window}}"/>
-                                                    <TextBlock Margin="0,8,0,0"><Run Text="规格号: "/><Run Text="{Binding Spec, Mode=OneWay}"/></TextBlock>
-                                                    <TextBlock Margin="0,2,0,0" TextWrapping="Wrap"><Run Text="描述: "/><Run Text="{Binding Description, Mode=OneWay}"/></TextBlock>
-                                                    <TextBlock Margin="0,2,0,0"><Run Text="名称: "/><Run Text="{Binding Name, Mode=OneWay}"/></TextBlock>
-                                                    <TextBlock Margin="0,2,0,0"><Run Text="品牌: "/><Run Text="{Binding Brand, Mode=OneWay}"/></TextBlock>
-                                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                                                        <Button Content="作为替代料"
-                                                                Style="{StaticResource PrimaryButton}"
-                                                                Padding="10,4"
-                                                                Command="{Binding DataContext.CreateMaterial.UseCandidateAsReplacementCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                CommandParameter="{Binding}"/>
-                                                        <Button Content="查看详情（预留）"
-                                                                Style="{StaticResource GhostButton}"
-                                                                Margin="8,0,0,0"
-                                                                IsEnabled="False"/>
+                                            <Border Style="{StaticResource CandidateCardStyle}"
+                                                    Padding="10"
+                                                    Margin="0,4">
+
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <!-- 左侧内容 -->
+                                                    <StackPanel>
+
+                                                        <!-- 第一行：Code + 状态 + 操作 -->
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <!-- Code（主标题） -->
+                                                            <TextBlock Text="{Binding Code}"
+                                                                    FontSize="15"
+                                                                    FontWeight="Bold"
+                                                                    VerticalAlignment="Center"/>
+
+                                                            <!-- 相似度 -->
+                                                            <Border Grid.Column="1"
+                                                                    Background="#FEF3C7"
+                                                                    CornerRadius="4"
+                                                                    Padding="4,1"
+                                                                    Margin="8,0,0,0"
+                                                                    VerticalAlignment="Center">
+                                                                <TextBlock FontSize="10"
+                                                                        Text="{Binding DataContext.CreateMaterial.CandidateSimilarityPlaceholder,
+                                                                                RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                            </Border>
+
+                                                            <!-- 操作按钮 -->
+                                                            <Button Grid.Column="2"
+                                                                    Content="生成替代料"
+                                                                    Style="{StaticResource PrimaryButton}"
+                                                                    Padding="8,4"
+                                                                    Margin="8,0,0,0"
+                                                                    Command="{Binding DataContext.CreateMaterial.UseCandidateAsReplacementCommand,
+                                                                            RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    CommandParameter="{Binding}"/>
+                                                        </Grid>
+
+                                                        <!-- 第二行：Spec -->
+                                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                            <TextBlock Text="规格:"
+                                                                    FontSize="11"
+                                                                    Foreground="{StaticResource Brush.Text.Muted}"/>
+
+                                                            <TextBlock Text="{Binding Spec}"
+                                                                    Margin="4,0,0,0"
+                                                                    FontWeight="SemiBold"
+                                                                    Foreground="{StaticResource Brush.Primary}"/>
+                                                        </StackPanel>
+
+                                                        <!-- 第三行：Description -->
+                                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                            <TextBlock Text="描述:"
+                                                                    FontSize="11"
+                                                                    Foreground="{StaticResource Brush.Text.Muted}"/>
+
+                                                            <TextBlock Text="{Binding Description}"
+                                                                    Margin="4,0,0,0"
+                                                                    Foreground="{StaticResource Brush.Text.Muted}"
+                                                                    TextTrimming="CharacterEllipsis"
+                                                                    TextWrapping="NoWrap"
+                                                                    Width="360"/>
+                                                        </StackPanel>
+
+                                                        <!-- 第四行：Name + Brand -->
+                                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+
+                                                            <TextBlock Text="名称:"
+                                                                    FontSize="11"
+                                                                    Foreground="{StaticResource Brush.Text.Muted}"/>
+
+                                                            <TextBlock Text="{Binding Name}"
+                                                                    Margin="4,0,12,0"/>
+
+                                                            <TextBlock Text="品牌:"
+                                                                    FontSize="11"
+                                                                    Foreground="{StaticResource Brush.Text.Muted}"/>
+
+                                                            <TextBlock Text="{Binding Brand}"
+                                                                    Margin="4,0,0,0"/>
+                                                        </StackPanel>
                                                     </StackPanel>
-                                                </StackPanel>
+                                                </Grid>
                                             </Border>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
@@ -315,7 +390,7 @@
                                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
                                         <TextBlock Text="🔍" FontSize="36" HorizontalAlignment="Center"/>
                                         <TextBlock Text="输入规格号开始查重" FontWeight="SemiBold" FontSize="14" HorizontalAlignment="Center" Margin="0,12,0,0"/>
-                                        <TextBlock Text="支持规格号或描述模糊匹配" Foreground="{StaticResource Brush.Text.Muted}" HorizontalAlignment="Center" Margin="0,6,0,0" TextAlignment="Center"/>
+                                        <TextBlock Text="仅支持规格号（型号）匹配" Foreground="{StaticResource Brush.Text.Muted}" HorizontalAlignment="Center" Margin="0,6,0,0" TextAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
 

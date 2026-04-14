@@ -121,5 +121,56 @@ VALUES (@groupId, (SELECT category_id FROM material_group WHERE id=@groupId), @c
         Assert.True(r3.Data!.Items.Count <= 20);
         Assert.Contains(r3.Data.Items, x => x.Status == 0);
     }
+
+    [Fact]
+    public async Task SearchCandidatesBySpecOnly_OnlyMatchesSpec_NotSpecNormalized()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        var conn = db.Connection;
+
+        await conn.ExecuteAsync("INSERT INTO category(code,name) VALUES ('ZDA','A');");
+        await conn.ExecuteAsync("INSERT INTO material_group(id,category_id,category_code,serial_no) VALUES (1,1,'ZDA',1);");
+        // spec does NOT contain '10uF', but spec_normalized does.
+        await conn.ExecuteAsync(@"
+INSERT INTO material_item(group_id,category_id,category_code,code,suffix,name,description,spec,spec_normalized,brand,status)
+VALUES
+ (1,1,'ZDA','ZDA0000001A','A','n','10uF 16V 0603','CL10A106','10UF 16V 0603',NULL,1);");
+
+        var app = new MaterialApplicationService(new SqliteUnitOfWork(conn), new SqliteMaterialRepository(conn));
+
+        var r1 = await app.SearchCandidatesBySpecOnlyAsync("ZDA", "CL10A106", limit: 20);
+        Assert.True(r1.IsSuccess);
+        Assert.Single(r1.Data!.Items);
+
+        var r2 = await app.SearchCandidatesBySpecOnlyAsync("ZDA", "10uF", limit: 20);
+        Assert.True(r2.IsSuccess);
+        Assert.Empty(r2.Data!.Items);
+    }
+
+    [Fact]
+    public async Task SearchCandidatesBySpecOnly_ExactMatchRanksFirst()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        var conn = db.Connection;
+
+        await conn.ExecuteAsync("INSERT INTO category(code,name) VALUES ('ZDA','A');");
+        await conn.ExecuteAsync("INSERT INTO material_group(id,category_id,category_code,serial_no) VALUES (1,1,'ZDA',1);");
+
+        // same group, different suffix -> stable ordering after rank
+        await conn.ExecuteAsync(@"
+INSERT INTO material_item(group_id,category_id,category_code,code,suffix,name,description,spec,spec_normalized,brand,status)
+VALUES
+ (1,1,'ZDA','ZDA0000001A','A','n','d','CL10A106X','CL10A106X',NULL,1),
+ (1,1,'ZDA','ZDA0000001B','B','n','d','XCL10A106','XCL10A106',NULL,1),
+ (1,1,'ZDA','ZDA0000001C','C','n','d','CL10A106','CL10A106',NULL,1);");
+
+        var app = new MaterialApplicationService(new SqliteUnitOfWork(conn), new SqliteMaterialRepository(conn));
+
+        var r = await app.SearchCandidatesBySpecOnlyAsync("ZDA", "CL10A106", limit: 20);
+        Assert.True(r.IsSuccess);
+        Assert.True(r.Data!.Items.Count >= 3);
+
+        Assert.Equal("CL10A106", r.Data.Items[0].Spec);
+    }
 }
 

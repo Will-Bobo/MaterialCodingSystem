@@ -178,12 +178,28 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
     public string? LastSearchBySpecAllKeyword { get; private set; }
     public bool LastSearchBySpecAllIncludeDeprecated { get; private set; }
     public int LastSearchBySpecAllLimit { get; private set; }
+    public string? LastSearchCandidatesBySpecOnlyCategoryCode { get; private set; }
+    public string? LastSearchCandidatesBySpecOnlyKeyword { get; private set; }
+    public int LastSearchCandidatesBySpecOnlyLimit { get; private set; }
 
     public Task<PagedResult<MaterialItemSpecHit>> SearchBySpecAllAsync(string keyword, bool includeDeprecated, int limit, CancellationToken ct = default)
     {
         LastSearchBySpecAllKeyword = keyword;
         LastSearchBySpecAllIncludeDeprecated = includeDeprecated;
         LastSearchBySpecAllLimit = limit;
+        var list = SpecSearchHits.Take(limit).ToList();
+        return Task.FromResult(new PagedResult<MaterialItemSpecHit>(list.Count, list));
+    }
+
+    public Task<PagedResult<MaterialItemSpecHit>> SearchCandidatesBySpecOnlyAsync(
+        string categoryCode,
+        string keyword,
+        int limit,
+        CancellationToken ct = default)
+    {
+        LastSearchCandidatesBySpecOnlyCategoryCode = categoryCode;
+        LastSearchCandidatesBySpecOnlyKeyword = keyword;
+        LastSearchCandidatesBySpecOnlyLimit = limit;
         var list = SpecSearchHits.Take(limit).ToList();
         return Task.FromResult(new PagedResult<MaterialItemSpecHit>(list.Count, list));
     }

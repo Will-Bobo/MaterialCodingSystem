@@ -594,6 +594,32 @@ public sealed class MaterialApplicationService
             return Result<PagedResult<MaterialItemSpecHit>>.Ok(await _repo.SearchBySpecAsync(fixedQuery, ct));
         }, ct);
 
+    /// <summary>
+    /// CreateMaterial 候选收敛：仅基于 spec（规格号）模糊匹配；固定 status=1；不使用 spec_normalized。
+    /// 注意：此用例仅供“新建主物料(A)”候选提示使用，不影响 SearchBySpec 行为。
+    /// </summary>
+    public Task<Result<PagedResult<MaterialItemSpecHit>>> SearchCandidatesBySpecOnlyAsync(
+        string categoryCode,
+        string keyword,
+        int limit = 20,
+        CancellationToken ct = default)
+        => _uow.ExecuteAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(categoryCode))
+            {
+                return Result<PagedResult<MaterialItemSpecHit>>.Fail(ErrorCodes.VALIDATION_ERROR, "category_code is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(keyword))
+            {
+                return Result<PagedResult<MaterialItemSpecHit>>.Fail(ErrorCodes.VALIDATION_ERROR, "spec_keyword is required.");
+            }
+
+            var fixedLimit = Math.Min(limit <= 0 ? 20 : limit, 20);
+            return Result<PagedResult<MaterialItemSpecHit>>.Ok(
+                await _repo.SearchCandidatesBySpecOnlyAsync(categoryCode.Trim(), keyword.Trim(), fixedLimit, ct));
+        }, ct);
+
     public Task<Result<PagedResult<MaterialItemSpecHit>>> SearchBySpecAllAsync(
         string keyword,
         bool includeDeprecated,

@@ -74,12 +74,12 @@ public sealed class CreateMaterialViewModelTests
         vm.Spec = "PART";
 
         Assert.Single(vm.CandidateItems);
-        Assert.Equal("PART", repo.LastSearchBySpecQuery!.SpecKeyword);
-        Assert.Equal("ZDA", repo.LastSearchBySpecQuery.CategoryCode);
+        Assert.Equal("PART", repo.LastSearchCandidatesBySpecOnlyKeyword);
+        Assert.Equal("ZDA", repo.LastSearchCandidatesBySpecOnlyCategoryCode);
     }
 
     [Fact]
-    public async Task When_description_field_active_uses_description_as_search_keyword()
+    public async Task When_description_field_active_does_not_trigger_candidate_search()
     {
         var repo = new FakeMaterialRepository();
         repo.CategoryRows.Add(("ZDB", "电容"));
@@ -98,9 +98,8 @@ public sealed class CreateMaterialViewModelTests
         vm.NotifyDescriptionFieldFocused();
         vm.Description = "10UF 16V";
 
-        Assert.Single(vm.CandidateItems);
-        Assert.Equal("10UF 16V", repo.LastSearchBySpecQuery!.SpecKeyword);
-        Assert.Equal("ZDB", repo.LastSearchBySpecQuery.CategoryCode);
+        Assert.Empty(vm.CandidateItems);
+        Assert.Null(repo.LastSearchCandidatesBySpecOnlyKeyword);
     }
 
     [Fact]
@@ -126,5 +125,33 @@ public sealed class CreateMaterialViewModelTests
         await Task.Delay(400);
 
         Assert.Equal(UiResources.Get(UiResourceKeys.Error.SpecDuplicate), vm.SpecFieldError);
+    }
+
+    [Fact]
+    public async Task Create_success_clears_input_fields_for_next_entry()
+    {
+        var repo = new FakeMaterialRepository();
+        var app = new MaterialApplicationService(new NoopUnitOfWork(), repo);
+        var vm = new CreateMaterialViewModel(
+            app,
+            new SynchronousDebouncer(),
+            new NoopUiRenderer(),
+            new NoopUiDispatcher(),
+            _ => Task.CompletedTask,
+            () => Task.CompletedTask);
+
+        await Task.Delay(150);
+        vm.SelectedCategory = vm.Categories.First(c => c.Code == "ZDA");
+        vm.Spec = "S1";
+        vm.Name = "n";
+        vm.Description = "D1";
+        vm.Brand = "B1";
+
+        vm.CreateCommand.Execute(null);
+        await Task.Delay(400);
+
+        Assert.Equal("", vm.Spec);
+        Assert.Equal("", vm.Description);
+        Assert.Equal("", vm.Brand);
     }
 }
