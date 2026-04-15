@@ -17,5 +17,13 @@ public static class ErrorCodes
     public const string INTERNAL_ERROR = "INTERNAL_ERROR";
     /// <summary>导出目标文件被占用，无法覆盖（例如 Excel 正打开该文件）。</summary>
     public const string EXPORT_FILE_IN_USE = "EXPORT_FILE_IN_USE";
+    /// <summary>导出目标路径不允许为主库文件本身（防止覆盖/损坏）。</summary>
+    public const string DB_EXPORT_TARGET_IS_MAIN_DB = "DB_EXPORT_TARGET_IS_MAIN_DB";
+    public const string DB_EXPORT_TARGET_DELETE_FAILED = "DB_EXPORT_TARGET_DELETE_FAILED";
+
+    public const string DB_RESTORE_SOURCE_IS_CURRENT_DB = "DB_RESTORE_SOURCE_IS_CURRENT_DB";
+    public const string DB_RESTORE_SOURCE_INVALID = "DB_RESTORE_SOURCE_INVALID";
+    public const string DB_RESTORE_CLOSE_CONNECTION_FAILED = "DB_RESTORE_CLOSE_CONNECTION_FAILED";
+    public const string DB_RESTORE_REPLACE_FAILED = "DB_RESTORE_REPLACE_FAILED";
 }
 

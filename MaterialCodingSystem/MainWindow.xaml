@@ -830,12 +830,37 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="导出 Excel">
+            <TabItem Header="导出 Excel/数据备份">
                 <StackPanel Margin="24">
-                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
-                               Text="导出当前库中的全部物料（含已废弃）；按分类分 Sheet；列：编码、名称、规格描述、规格号、品牌、状态。"/>
-                    <Button HorizontalAlignment="Left" Width="200" Padding="12,8" Content="导出到 Excel…" Command="{Binding Export.ExportCommand}"/>
-                    <Border Margin="0,16,0,0"
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource TitleText}" Text="Excel 数据导出" Margin="0,0,0,8"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,0,12"
+                                       Text="导出当前库中的全部物料（含已废弃）；按分类分 Sheet。"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button HorizontalAlignment="Left" Width="200" Padding="12,8"
+                                        Content="导出到 Excel…" Command="{Binding Export.ExportCommand}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource TitleText}" Text="数据库备份与恢复" Margin="0,0,0,8"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource Brush.Text.Muted}" Margin="0,0,0,12"
+                                       Text="用于数据库备份、迁移、恢复。"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button HorizontalAlignment="Left" Width="200" Padding="12,8" Margin="0,0,12,0"
+                                        Content="导出数据库" Command="{Binding Export.ExportDbCommand}"/>
+                                <Button HorizontalAlignment="Left" Width="200" Padding="12,8"
+                                        Content="恢复数据库" Command="{Binding Export.RestoreDbCommand}"/>
+                            </StackPanel>
+                            <TextBlock Foreground="{StaticResource Brush.Field.Error}" TextWrapping="Wrap"
+                                       Text="⚠ 恢复数据库将覆盖当前数据，并自动重启程序。"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Margin="0,0,0,0"
                             Background="#F8FAFC"
                             BorderBrush="{StaticResource Brush.Border.Subtle}"
                             BorderThickness="1"

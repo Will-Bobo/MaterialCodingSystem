@@ -22,6 +22,11 @@ meta:
     STATUS_DISPLAY_001: [contract_only, echo]
     EXPORT_ORDER_001: [contract_only, echo]
     CATEGORY_NOT_FOUND_001: [contract_only, echo]
+    DB_EXPORT_001: [contract_only, echo]
+    DB_AUTOBACKUP_001: [contract_only, echo]
+    DB_RESTORE_001: [contract_only, echo]
+    DB_RESTORE_002: [contract_only, echo]
+    DB_RESTORE_003: [contract_only, echo]
   prd_freeze:
     version: "2026-04-13"
     name_policy:
@@ -1029,6 +1034,144 @@ cases:
           scenario: category_code_not_found
           expected_error: CATEGORY_NOT_FOUND
           priority: "先于 suffix 分配"
+
+    replay: true
+    deterministic: true
+
+
+# =====================================================
+# 22. V1.3 — DB Backup / Export / Restore（contract only）
+# =====================================================
+  - id: DB_EXPORT_001
+    title: 导出数据库必须使用 vacuum_into（禁止 File.Copy；用户选择路径）
+    type: contract
+
+    given:
+      input:
+        value:
+          capability: db_export
+          method: vacuum_into
+          forbid:
+            - file_copy
+          path_source: user_selected
+
+    when:
+      action: echo
+
+    then:
+      output:
+        result:
+          capability: db_export
+          method: vacuum_into
+          forbid:
+            - file_copy
+          path_source: user_selected
+
+    replay: true
+    deterministic: true
+
+
+  - id: DB_AUTOBACKUP_001
+    title: 自动备份触发语义（启动后触发；仅一次；不阻断；失败仅记录）
+    type: contract
+
+    given:
+      input:
+        value:
+          capability: db_autobackup
+          trigger: app_start
+          frequency: once
+          blocking: false
+          failure_policy: log_only
+
+    when:
+      action: echo
+
+    then:
+      output:
+        result:
+          capability: db_autobackup
+          trigger: app_start
+          frequency: once
+          blocking: false
+          failure_policy: log_only
+
+    replay: true
+    deterministic: true
+
+
+  - id: DB_RESTORE_001
+    title: 恢复核心语义（文件替换；要求重启；禁止原地写入）
+    type: contract
+
+    given:
+      input:
+        value:
+          capability: db_restore
+          restore_mode: file_replace
+          require_restart: true
+          forbid_inplace_write: true
+
+    when:
+      action: echo
+
+    then:
+      output:
+        result:
+          capability: db_restore
+          restore_mode: file_replace
+          require_restart: true
+          forbid_inplace_write: true
+
+    replay: true
+    deterministic: true
+
+
+  - id: DB_RESTORE_002
+    title: 恢复安全约束（禁止自恢复）
+    type: contract
+
+    given:
+      input:
+        value:
+          capability: db_restore
+          forbid_self_restore: true
+
+    when:
+      action: echo
+
+    then:
+      output:
+        result:
+          capability: db_restore
+          forbid_self_restore: true
+
+    replay: true
+    deterministic: true
+
+
+  - id: DB_RESTORE_003
+    title: 恢复原子性保障（临时文件 + 原子替换；保留备份可选）
+    type: contract
+
+    given:
+      input:
+        value:
+          capability: db_restore
+          temp_file: true
+          atomic_replace: true
+          keep_backup: optional
+
+    when:
+      action: echo
+
+    then:
+      output:
+        result:
+          capability: db_restore
+          temp_file: true
+          atomic_replace: true
+          keep_backup: optional
 
     replay: true
     deterministic: true

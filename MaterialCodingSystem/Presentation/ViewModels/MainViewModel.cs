@@ -25,11 +25,16 @@ public sealed class MainViewModel : ViewModelBase
 
     public MainViewModel(
         MaterialApplicationService app,
+        DatabaseBackupService backup,
+        IDatabasePathProvider paths,
         IDebouncer debouncer,
         IUiRenderer uiRenderer,
         IUiDispatcher uiDispatcher,
         IExportPathPreferenceStore exportPathStore,
-        IFileSaveDialog saveDialog)
+        IFileSaveDialog saveDialog,
+        IFileDbSaveDialog dbSaveDialog,
+        IFileOpenDialog openDialog,
+        IUiDialogService dialogs)
     {
         _app = app;
         _uiRenderer = uiRenderer;
@@ -46,7 +51,7 @@ public sealed class MainViewModel : ViewModelBase
         CreateReplacement = new CreateReplacementViewModel(app, uiRenderer, uiDispatcher);
         Search = new SearchViewModel(app, this, uiRenderer, uiDispatcher);
         Deprecate = new DeprecateViewModel(app, uiRenderer, uiDispatcher);
-        Export = new ExportViewModel(app, exportPathStore, saveDialog, uiRenderer, uiDispatcher);
+        Export = new ExportViewModel(app, backup, paths, exportPathStore, saveDialog, dbSaveDialog, openDialog, dialogs, uiRenderer, uiDispatcher);
     }
 
     private Task OpenAddCategoryDialog()

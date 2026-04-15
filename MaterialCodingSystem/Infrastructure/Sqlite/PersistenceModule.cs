@@ -12,7 +12,8 @@ public static class PersistenceModule
     {
         services.AddSingleton(_ =>
         {
-            var conn = new SqliteConnection($"Data Source={dbPath}");
+            // Pooling must be disabled to ensure Restore can release file handles deterministically.
+            var conn = new SqliteConnection($"Data Source={dbPath};Pooling=False");
             conn.Open();
             SqliteSchema.EnsureCreated(conn);
             return conn;

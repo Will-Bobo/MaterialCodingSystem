@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using MaterialCodingSystem.Presentation.Services;
 
 namespace MaterialCodingSystem.Presentation.ViewModels;
 
@@ -11,11 +12,16 @@ public sealed class RelayCommand : ICommand
     {
         _execute = execute;
         _canExecute = canExecute;
+        ReadOnlyLock.Changed += (_, _) => RaiseCanExecuteChanged();
     }
 
     public event EventHandler? CanExecuteChanged;
 
-    public bool CanExecute(object? parameter) => _canExecute?.Invoke() ?? true;
+    public bool CanExecute(object? parameter)
+    {
+        if (ReadOnlyLock.IsLocked) return false;
+        return _canExecute?.Invoke() ?? true;
+    }
 
     public void Execute(object? parameter) => _execute();
 
@@ -31,11 +37,16 @@ public sealed class RelayCommand<T> : ICommand
     {
         _execute = execute;
         _canExecute = canExecute;
+        ReadOnlyLock.Changed += (_, _) => RaiseCanExecuteChanged();
     }
 
     public event EventHandler? CanExecuteChanged;
 
-    public bool CanExecute(object? parameter) => _canExecute?.Invoke((T?)parameter) ?? true;
+    public bool CanExecute(object? parameter)
+    {
+        if (ReadOnlyLock.IsLocked) return false;
+        return _canExecute?.Invoke((T?)parameter) ?? true;
+    }
 
     public void Execute(object? parameter) => _execute((T?)parameter);
 
