@@ -259,6 +259,133 @@ public sealed class MaterialApplicationService
             ));
         }, ct, retryConstraint: IMaterialRepository.CONSTRAINT_GROUP_CATEGORY_SERIAL);
 
+    public Task<Result<CreateMaterialItemManualResponse>> CreateMaterialItemManual(CreateMaterialItemManualRequest req, CancellationToken ct = default)
+        => _uow.ExecuteAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(req.Description))
+            {
+                return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "description is required.");
+            }
+
+            // category_code 统一按 trim+upper 处理（与 Manual code 标准化一致）
+            CategoryCode selectedCategoryCode;
+            Spec spec;
+            try
+            {
+                selectedCategoryCode = new CategoryCode(req.CategoryCode.Trim().ToUpperInvariant());
+                spec = new Spec(req.Spec);
+            }
+            catch (DomainException ex) when (ex.Code == "VALIDATION_ERROR")
+            {
+                return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.VALIDATION_ERROR, ex.Message);
+            }
+
+            ManualMaterialCode parsed;
+            try
+            {
+                parsed = ManualMaterialCode.Parse(req.Code);
+            }
+            catch (DomainException ex) when (ex.Code == ErrorCodes.CODE_FORMAT_INVALID)
+            {
+                return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.CODE_FORMAT_INVALID, ex.Message);
+            }
+
+            if (!string.Equals(parsed.CategoryCode.Value, selectedCategoryCode.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.CATEGORY_MISMATCH, "category mismatch.");
+            }
+
+            var categoryExists = await _repo.CategoryExistsAsync(selectedCategoryCode, ct);
+            if (!categoryExists)
+            {
+                return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.CATEGORY_NOT_FOUND, "category_code not found.");
+            }
+
+            var categoryName = await _repo.GetCategoryNameByCodeAsync(selectedCategoryCode, ct);
+            if (string.IsNullOrWhiteSpace(categoryName))
+            {
+                return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.CATEGORY_NOT_FOUND, "category_code not found.");
+            }
+
+            var categoryId = await _repo.GetCategoryIdByCodeAsync(selectedCategoryCode, ct);
+            if (categoryId is null)
+            {
+                return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.CATEGORY_NOT_FOUND, "category_code not found.");
+            }
+
+            var specExists = await _repo.SpecExistsAsync(selectedCategoryCode, spec, ct);
+            if (specExists)
+            {
+                return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
+            }
+
+            // Manual：按 (category_id, serial_no) 复用或创建 group（禁止 max+1）
+            var groupId = await _repo.GetGroupIdByCategoryAndSerialNoAsync(categoryId.Value, parsed.SerialNo, ct);
+            if (groupId is null)
+            {
+                try
+                {
+                    groupId = await _repo.InsertGroupAsync(selectedCategoryCode, parsed.SerialNo, ct);
+                }
+                catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_GROUP_CATEGORY_SERIAL)
+                {
+                    // 并发：插入冲突 → 重新查询并复用（不视为失败）
+                    groupId = await _repo.GetGroupIdByCategoryAndSerialNoAsync(categoryId.Value, parsed.SerialNo, ct);
+                    if (groupId is null)
+                    {
+                        return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.INTERNAL_ERROR, "group conflict but cannot re-query group.");
+                    }
+                }
+                catch (DbConstraintViolationException)
+                {
+                    return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.INTERNAL_ERROR, "unexpected constraint on insert group.");
+                }
+            }
+
+            var normalized = new SpecNormalized(SpecNormalizer.NormalizeV1(req.Description));
+            var item = new MaterialItem(
+                code: parsed.NormalizedCode,
+                suffix: parsed.Suffix,
+                spec: spec,
+                name: categoryName,
+                description: req.Description,
+                specNormalized: normalized,
+                brand: req.Brand
+            );
+
+            try
+            {
+                await _repo.InsertItemAsync(groupId.Value, item, ct);
+            }
+            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CATEGORY_SPEC)
+            {
+                return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
+            }
+            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX)
+            {
+                // 规则：同组 suffix 唯一冲突统一返回 CODE_DUPLICATE
+                return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.CODE_DUPLICATE, "suffix duplicate in group.");
+            }
+            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CODE)
+            {
+                return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.CODE_DUPLICATE, "code duplicate.");
+            }
+            catch (DbConstraintViolationException)
+            {
+                return Result<CreateMaterialItemManualResponse>.Fail(ErrorCodes.INTERNAL_ERROR, "constraint violation on insert item.");
+            }
+
+            return Result<CreateMaterialItemManualResponse>.Ok(new CreateMaterialItemManualResponse(
+                GroupId: groupId.Value,
+                CategoryCode: selectedCategoryCode.Value,
+                SerialNo: parsed.SerialNo,
+                Code: parsed.NormalizedCode,
+                Suffix: parsed.Suffix.Value.ToString(),
+                Spec: spec.Value,
+                SpecNormalized: normalized.Value
+            ));
+        }, ct);
+
     public Task<Result<CreateReplacementResponse>> CreateReplacement(CreateReplacementRequest req, CancellationToken ct = default)
         => ExecuteWithRetry(async () =>
         {

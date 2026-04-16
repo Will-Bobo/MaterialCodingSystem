@@ -121,24 +121,52 @@
                                     <Border BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
                                         <StackPanel>
                                             <TextBlock Text="分类" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                            <ComboBox Style="{StaticResource ModernComboBox}"
-                                                      ItemsSource="{Binding CreateMaterial.Categories}"
-                                                      SelectedItem="{Binding CreateMaterial.SelectedCategory}"
-                                                      Margin="0,0,0,8">
-                                                <ComboBox.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <TextBlock>
-                                                            <Run Text="{Binding Code}"/>
-                                                            <Run Text=" - "/>
-                                                            <Run Text="{Binding Name}"/>
-                                                        </TextBlock>
-                                                    </DataTemplate>
-                                                </ComboBox.ItemTemplate>
-                                            </ComboBox>
-                                            <StackPanel Orientation="Horizontal">
-                                                <Button Padding="12,4" Content="刷新" Command="{Binding CreateMaterial.RefreshCategoriesCommand}"/>
-                                                <Button Padding="12,4" Margin="8,0,0,0" Content="新增分类…" Command="{Binding CreateMaterial.OpenAddCategoryCommand}"/>
-                                            </StackPanel>
+                                            <Grid Margin="0,0,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <ComboBox Grid.Column="0"
+                                                          Style="{StaticResource ModernComboBox}"
+                                                          ItemsSource="{Binding CreateMaterial.Categories}"
+                                                          SelectedItem="{Binding CreateMaterial.SelectedCategory}"
+                                                          Margin="0,0,8,0">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock>
+                                                                <Run Text="{Binding Code}"/>
+                                                                <Run Text=" - "/>
+                                                                <Run Text="{Binding Name}"/>
+                                                            </TextBlock>
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
+
+                                                <Button Grid.Column="1"
+                                                        Padding="12,4"
+                                                        Content="刷新"
+                                                        Command="{Binding CreateMaterial.RefreshCategoriesCommand}"/>
+                                                <Button Grid.Column="2"
+                                                        Padding="12,4"
+                                                        Margin="8,0,0,0"
+                                                        Content="新增分类…"
+                                                        Command="{Binding CreateMaterial.OpenAddCategoryCommand}"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="物料编码(code)" FontWeight="SemiBold"/>
+                                            <TextBlock Foreground="{StaticResource Brush.Text.Muted}" FontSize="11" Margin="0,4,0,0"
+                                                       Text="格式：[3位分类编码] + [7位流水号] + [A-Z]（示例：ELC0000123A）"/>
+                                            <TextBox Style="{StaticResource ModernTextBox}"
+                                                     Margin="0,4,0,0"
+                                                     Text="{Binding CreateMaterial.Code, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock Foreground="{StaticResource Brush.Field.Error}" FontSize="11" TextWrapping="Wrap"
+                                                       Text="{Binding CreateMaterial.CodeFieldError}"/>
                                         </StackPanel>
                                     </Border>
 
@@ -188,6 +216,7 @@
                             <StackPanel Grid.Row="1" Margin="0,16,0,0">
                                 <Button Content="创建主物料"
                                         Style="{StaticResource PrimaryButton}"
+                                        Height="41"
                                         HorizontalAlignment="Stretch"
                                         Command="{Binding CreateMaterial.CreateCommand}"/>
                                 <TextBlock TextWrapping="Wrap" Text="{Binding CreateMaterial.Result}" Margin="0,12,0,0"/>

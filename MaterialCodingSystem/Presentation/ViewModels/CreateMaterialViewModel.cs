@@ -149,11 +149,26 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         }
     }
 
+    private string _code = "";
+    public string Code
+    {
+        get => _code;
+        set
+        {
+            if (SetProperty(ref _code, value))
+                RefreshDerivedState();
+        }
+    }
+
     private CreateMaterialState ComputeState()
     {
         var specTrim = Spec?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(specTrim))
             return CreateMaterialState.Empty;
+
+        // Manual 模式：code 必填
+        if (string.IsNullOrWhiteSpace(Code?.Trim()))
+            return CreateMaterialState.MissingRequiredFields;
 
         // 1) 完全匹配：最高优先级，硬阻断
         if (HasExactSpecMatch)
@@ -194,6 +209,9 @@ public sealed class CreateMaterialViewModel : ViewModelBase
                 UpdateSpecInputStateHint();
         }
     }
+
+    private string _codeFieldError = "";
+    public string CodeFieldError { get => _codeFieldError; set => SetProperty(ref _codeFieldError, value); }
 
     private string _globalError = "";
     public string GlobalError { get => _globalError; set => SetProperty(ref _globalError, value); }
@@ -479,6 +497,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         try
         {
             // 清空输入，便于再次录入；保留分类选择以提升录入效率
+            Code = "";
             Spec = "";
             Description = "";
             Brand = "";
@@ -664,6 +683,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         // 仅 UI 确认：不改业务逻辑
         var model = new CreateMaterialConfirmModel
         {
+            Code = Code?.Trim() ?? "",
             Spec = Spec?.Trim() ?? "",
             Description = Description?.Trim() ?? "",
             Name = SelectedCategory?.Name ?? "",
@@ -687,8 +707,9 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             return;
         }
 
-        var res = await _app.CreateMaterialItemA(new CreateMaterialItemARequest(
+        var res = await _app.CreateMaterialItemManual(new CreateMaterialItemManualRequest(
             CategoryCode: categoryCode,
+            Code: Code,
             Spec: Spec,
             Name: Name,
             Description: Description,
@@ -717,6 +738,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
     private void ClearCreateMaterialSubmitFeedback()
     {
+        CodeFieldError = "";
         SpecFieldError = "";
         GlobalError = "";
         Result = "";

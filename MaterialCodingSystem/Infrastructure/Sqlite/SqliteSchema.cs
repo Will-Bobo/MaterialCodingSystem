@@ -26,6 +26,14 @@ public static class SqliteSchema
                        FOREIGN KEY(category_id) REFERENCES category(id)
                      );
                      
+                     -- material_item 的 spec 唯一性口径迁移：
+                     -- 历史版本为表级 UNIQUE(category_code, spec)（会导致 status=0 仍占用 spec）。
+                     -- PRD V1.3 冻结口径：仅启用态(status=1)唯一 -> 部分唯一索引。
+                     """,
+            transaction: tx);
+
+        // 1) 确保 material_item 基表存在（用于后续 PRAGMA 检测）
+        conn.Execute("""
                      CREATE TABLE IF NOT EXISTS material_item (
                        id INTEGER PRIMARY KEY AUTOINCREMENT,
                        group_id INTEGER NOT NULL,
@@ -47,6 +55,14 @@ public static class SqliteSchema
                        FOREIGN KEY(category_id) REFERENCES category(id),
                        CHECK(status IN (0,1))
                      );
+                     """, transaction: tx);
+
+        // 2) 如未完成迁移，则把表级 UNIQUE(category_code, spec) 迁移为部分唯一索引：
+        //    CREATE UNIQUE INDEX ... WHERE status=1
+        EnsureSpecUniqueActiveOnlyMigrated(conn, tx);
+
+        // 3) 其他表与索引
+        conn.Execute("""
                      
                      CREATE TABLE IF NOT EXISTS material_attribute (
                        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +82,100 @@ public static class SqliteSchema
                      """,
             transaction: tx);
         tx.Commit();
+    }
+
+    private static void EnsureSpecUniqueActiveOnlyMigrated(SqliteConnection conn, SqliteTransaction tx)
+    {
+        // 已存在部分唯一索引，则视为迁移完成（幂等）
+        var hasActiveIndex = conn.ExecuteScalar<long>(
+            """
+            SELECT COUNT(1)
+            FROM sqlite_master
+            WHERE type='index' AND name='ux_material_item_category_spec_active';
+            """,
+            transaction: tx);
+        if (hasActiveIndex > 0) return;
+
+        // 通过建表 SQL 判断是否仍存在表级 UNIQUE(category_code, spec)
+        var createSql = conn.ExecuteScalar<string?>(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='material_item' LIMIT 1;",
+            transaction: tx) ?? string.Empty;
+
+        var hasLegacyUnique = createSql.IndexOf("UNIQUE(category_code, spec)", StringComparison.OrdinalIgnoreCase) >= 0;
+        if (!hasLegacyUnique)
+        {
+            // 无旧约束：直接创建部分唯一索引（即使未来 schema 直接变更，此处也能补齐索引）
+            conn.Execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_material_item_category_spec_active
+                ON material_item(category_code, spec)
+                WHERE status = 1;
+                """,
+                transaction: tx);
+            return;
+        }
+
+        // 安全迁移：重建 material_item 表，移除表级 UNIQUE(category_code, spec)，改为部分唯一索引
+        conn.Execute("PRAGMA foreign_keys=OFF;", transaction: tx);
+
+        conn.Execute("ALTER TABLE material_item RENAME TO material_item_old;", transaction: tx);
+
+        conn.Execute("""
+                     CREATE TABLE material_item (
+                       id INTEGER PRIMARY KEY AUTOINCREMENT,
+                       group_id INTEGER NOT NULL,
+                       category_id INTEGER NOT NULL,
+                       category_code TEXT NOT NULL,
+                       code TEXT NOT NULL UNIQUE,
+                       suffix TEXT NOT NULL,
+                       name TEXT NOT NULL,
+                       description TEXT NOT NULL,
+                       spec TEXT NOT NULL,
+                       spec_normalized TEXT NOT NULL,
+                       brand TEXT,
+                       status INTEGER NOT NULL DEFAULT 1,
+                       is_structured INTEGER DEFAULT 0,
+                       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                       UNIQUE(group_id, suffix),
+                       FOREIGN KEY(group_id) REFERENCES material_group(id),
+                       FOREIGN KEY(category_id) REFERENCES category(id),
+                       CHECK(status IN (0,1))
+                     );
+                     """, transaction: tx);
+
+        conn.Execute("""
+                     INSERT INTO material_item(
+                       id, group_id, category_id, category_code,
+                       code, suffix, name, description, spec, spec_normalized, brand,
+                       status, is_structured, created_at
+                     )
+                     SELECT
+                       id, group_id, category_id, category_code,
+                       code, suffix, name, description, spec, spec_normalized, brand,
+                       status, is_structured, created_at
+                     FROM material_item_old;
+                     """, transaction: tx);
+
+        // 迁移后重建索引（与 EnsureCreated 其余部分一致；这里先建关键索引，后续外层 CREATE INDEX IF NOT EXISTS 仍幂等）
+        conn.Execute("""
+                     CREATE INDEX IF NOT EXISTS idx_material_item_code ON material_item(code);
+                     CREATE INDEX IF NOT EXISTS idx_material_item_spec ON material_item(spec);
+                     CREATE INDEX IF NOT EXISTS idx_material_item_spec_normalized ON material_item(spec_normalized);
+                     CREATE INDEX IF NOT EXISTS idx_item_category_spec_norm ON material_item(category_code, spec_normalized);
+                     CREATE INDEX IF NOT EXISTS idx_material_item_group_id ON material_item(group_id);
+                     CREATE INDEX IF NOT EXISTS idx_material_item_status ON material_item(status);
+                     """, transaction: tx);
+
+        conn.Execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS ux_material_item_category_spec_active
+            ON material_item(category_code, spec)
+            WHERE status = 1;
+            """,
+            transaction: tx);
+
+        conn.Execute("DROP TABLE material_item_old;", transaction: tx);
+        conn.Execute("PRAGMA foreign_keys=ON;", transaction: tx);
     }
 }
 

@@ -2,6 +2,9 @@ namespace MaterialCodingSystem.Application;
 
 public static class ErrorCodes
 {
+    public const string CODE_FORMAT_INVALID = "CODE_FORMAT_INVALID";
+    public const string CATEGORY_MISMATCH = "CATEGORY_MISMATCH";
+    public const string CODE_DUPLICATE = "CODE_DUPLICATE";
     public const string SPEC_DUPLICATE = "SPEC_DUPLICATE";
     public const string SUFFIX_OVERFLOW = "SUFFIX_OVERFLOW";
     public const string SUFFIX_SEQUENCE_BROKEN = "SUFFIX_SEQUENCE_BROKEN";

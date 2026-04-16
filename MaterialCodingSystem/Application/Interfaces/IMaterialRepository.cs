@@ -28,6 +28,8 @@ public interface IMaterialRepository
 
     Task<string?> GetCategoryNameByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default);
 
+    Task<int?> GetCategoryIdByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default);
+
     Task InsertCategoryAsync(string code, string name, CancellationToken ct = default);
 
     Task<IReadOnlyList<(string Code, string Name)>> ListCategoriesAsync(CancellationToken ct = default);
@@ -37,6 +39,9 @@ public interface IMaterialRepository
     Task<int> GetMaxSerialNoAsync(CategoryCode categoryCode, CancellationToken ct = default);
 
     Task<int> InsertGroupAsync(CategoryCode categoryCode, int serialNo, CancellationToken ct = default);
+
+    /// <summary>Manual：按 (category_id, serial_no) 查询已有组以复用。</summary>
+    Task<int?> GetGroupIdByCategoryAndSerialNoAsync(int categoryId, int serialNo, CancellationToken ct = default);
 
     Task InsertItemAsync(int groupId, MaterialItem item, CancellationToken ct = default);
 

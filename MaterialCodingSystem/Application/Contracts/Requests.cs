@@ -8,6 +8,15 @@ public sealed record CreateMaterialItemARequest(
     string? Brand
 );
 
+public sealed record CreateMaterialItemManualRequest(
+    string CategoryCode,
+    string Code,
+    string Spec,
+    string Name,
+    string Description,
+    string? Brand
+);
+
 public sealed record CreateReplacementRequest(
     int GroupId,
     string Spec,

@@ -23,7 +23,8 @@
 2. 替代料（A-Z）管理
 3. 防重复录入
 
-   * **同分类内规格号（spec）唯一**：`UNIQUE(category_code, spec)`，冲突必须阻止创建（`SPEC_DUPLICATE`）
+   * **同分类内规格号（spec）唯一（仅启用态）**：`UNIQUE(category_code, spec) WHERE status = 1`，冲突必须阻止创建（`SPEC_DUPLICATE`）
+   * **废弃（status=0）记录不占用 spec**：允许后续通过“新建物料”创建 **新记录/新 code** 复用 spec；**不允许复活旧记录替代新建**（见 **10.3**）
    * `spec_normalized` 仅用于搜索辅助，**不参与唯一性**；与 spec 重复相关的提示为人工判断辅助，不替代唯一性规则
 4. 快速检索（编码 / 规格号 / 规格描述）
 5. Excel 导出
@@ -243,13 +244,13 @@ MaterialItem（物料实例 A-Z）
 * 编码唯一：`UNIQUE(code)`
 * 同组内 A-Z 唯一：`UNIQUE(group_id, suffix)`
 * 分类流水号唯一：`UNIQUE(category_id, serial_no)`（在 `material_group`）
-* 规格唯一性（分类内）：`UNIQUE(category_code, spec)`（完全重复 spec 禁止创建）
+* 规格唯一性（分类内，仅启用态）：`UNIQUE(category_code, spec) WHERE status = 1`（存在启用态重复 spec 必须禁止创建：`SPEC_DUPLICATE`）
 
 **规格唯一性补充说明（工程口径）**
 
 * **spec（规格号）视为供应商定义的唯一样号标识**（型号 Part Number）。
 * 在电子元件领域中，**同一型号通常不会被多个品牌复用**；同时 **brand** 字段存在命名不规范（大小写、别名、多语言等）问题。
-* 因此系统唯一性设计为 **`UNIQUE(category_code, spec)`**，并明确：
+* 因此系统唯一性设计为 **“同分类 + 启用态 spec 唯一”**，并明确：
   * **同一 spec 在“正常状态（status=1）数据集”中只允许存在一条记录**（已废弃 `status=0` 不参与 spec 唯一性，占用可被释放，见 **10.1**）；
   * **即使录入时 brand 不同，只要 spec 相同，也视为同一物料**（不允许另建一条）；
   * **brand 不参与唯一性约束**。
@@ -257,9 +258,9 @@ MaterialItem（物料实例 A-Z）
 说明：
 
 * 物料编码体系唯一性仍以 `code` 为主唯一标识（等价 `category_code + serial_no + suffix`）
-* **spec = 规格号（供应商型号）**（同分类不允许重复）
+* **spec = 规格号（供应商型号）**（同分类在 `status=1` 数据集内不允许重复；`status=0` 仅保留历史，可被新建复用）
 * **spec_normalized = 基于 description 生成的搜索辅助字符串**（不参与唯一性约束）
-* `UNIQUE(category_code, spec)` 冲突（针对 `status=1`）→ 必须阻止创建（错误码：`SPEC_DUPLICATE`）
+* `UNIQUE(category_code, spec) WHERE status = 1` 冲突（针对 `status=1`）→ 必须阻止创建（错误码：`SPEC_DUPLICATE`）
 * 注意：spec 唯一性与编码/后缀唯一性不同；编码与后缀仍要求“废弃不释放”（见 **10.1**）
 
 **category_code 冗余一致性（必须）**
@@ -306,7 +307,7 @@ CREATE TABLE material_item (
 
     name          TEXT NOT NULL,
     description   TEXT NOT NULL,        -- 完整规格描述（必填）
-    spec          TEXT NOT NULL,        -- 规格号/供应商型号（必填，分类内唯一）
+    spec          TEXT NOT NULL,        -- 规格号/供应商型号（必填；仅启用态 status=1 在同分类内唯一）
     spec_normalized TEXT NOT NULL,      -- 由 description 生成，仅搜索辅助
     brand         TEXT,
 
@@ -315,11 +316,16 @@ CREATE TABLE material_item (
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
 
     UNIQUE(group_id, suffix),
-    UNIQUE(category_code, spec),
 
     FOREIGN KEY (group_id) REFERENCES material_group(id),
     FOREIGN KEY (category_id) REFERENCES category(id)
 );
+
+-- spec 唯一性（业务规则）：同分类 + 启用态(status=1) 唯一
+-- SQLite 支持部分唯一索引：若目标数据库不支持，则必须由应用层校验保证，并保留普通索引用于查询加速
+CREATE UNIQUE INDEX ux_material_item_category_spec_active
+ON material_item(category_code, spec)
+WHERE status = 1;
 
 -- 结构化字段（V2预留，V1可先建表不强依赖）
 CREATE TABLE material_attribute (
@@ -398,7 +404,7 @@ LIMIT 20;
 * **必须**带 `category_code` 过滤
 * **必须** `LIMIT 20`
 * V1 **不实现**相似度百分比、编辑距离、NLP、Embedding
-* 唯一性仍以 **`UNIQUE(category_code, spec)`** 为准；`spec_normalized` 相同仅作列表提示，**不阻止创建**
+* spec 唯一性仍以 **`UNIQUE(category_code, spec) WHERE status = 1`** 为准；`spec_normalized` 相同仅作列表提示，**不阻止创建**
 
 ## 七、核心功能
 
@@ -420,7 +426,7 @@ LIMIT 20;
 4. 提交时系统执行：
 
    * 生成 `spec_normalized = Normalize(description)`（仅 V1 三步规则，见第 10 章/第 15 章）
-   * **唯一性**：若同分类 **spec 已存在** → 禁止保存（`SPEC_DUPLICATE`）
+   * **唯一性（仅启用态）**：若同分类存在 `status=1` 的同 `spec` → 禁止保存（`SPEC_DUPLICATE`）
    * **提示**：若仅 `spec_normalized` 与某条记录相同（但 spec 不同）→ **仅提示**，不阻止创建
    * 生成编码（如 `ZDA0000001A`）
    * 创建 Group + Item(A)
@@ -629,6 +635,39 @@ PRD 需求（冻结）：
 
 ## 九、页面交互设计（重点）
 
+### 9.0 建料模式切换（V1.3 新增，冻结口径）
+
+系统支持两种建料模式（**模式切换**的产品语义，不删除既有自动编码能力）：
+
+* **Manual（手工输入，默认启用）**
+  * **UI 默认仅展示 Manual 入口**（本版本不在 UI 中提供 Auto 入口/开关）
+  * 用户在创建物料时 **手动输入 `code`**
+  * 提交时必须校验：
+    * **`code` 全局唯一**：`UNIQUE(code)`（**包含已废弃**，`status=0` 仍占用编码不释放，见 **10.1**）
+    * **`spec` 分类内唯一**：`UNIQUE(category_code, spec) WHERE status = 1`（仅约束 `status=1` 数据集，见 **10.1**）
+  * **Manual 编码格式（冻结）**：
+    * 固定格式：`[分类编码3位] + [7位流水号] + [A-Z]`（示例统一：`ELC0000123A`）
+    * 输入标准化（提交前，冻结）：对用户输入 `code` 执行 `trim()` 并统一转为大写（`ToUpperInvariant()`）后，再进入后续校验与解析
+    * 正则：`^[A-Z]{3}[0-9]{7}[A-Z]$`；不满足 → **`CODE_FORMAT_INVALID`**
+    * 解析规则：
+      * `category_code = code[0..2]`（前 3 位）
+      * `serial_no = int(code[3..9])`（中间 7 位，按十进制转整数）
+        * **合法范围（Manual）**：`serial_no >= 1`；`0000000` 视为非法 → **`CODE_FORMAT_INVALID`**
+      * `suffix = code[10]`（最后 1 位；非 `A-Z` → **`SUFFIX_INVALID`**）
+  * **分类一致性校验（Manual，冻结）**：
+    * 解析出的 `category_code` 必须等于表单所选 `category_code`
+    * 不一致 → **`CATEGORY_MISMATCH`**（提示“编码分类与当前选择分类不一致”）
+  * **MaterialGroup 创建规则（Manual，冻结）**：
+    * 提交时按 `(category_id, serial_no)` 查询 `material_group`
+      * 存在 → **复用**该 `group`
+      * 不存在 → **创建** `material_group(category_id, category_code, serial_no)`
+    * **禁止**走 Auto 的 `max(serial_no)+1` 流水分配逻辑（Manual 必须使用用户输入 code 中解析出的 `serial_no`）
+
+* **Auto（自动生成，保留能力，当前 UI 关闭/隐藏入口）**
+  * 自动编码规则保持不变（见 **五 / 10.2 / 15.6**）：
+    * **分类流水号生成**
+    * **suffix 从 `A` 起始**（主物料为 A；替代料按 A→B→… 连续分配）
+
 ### 9.1 新建物料页面（核心改造）
 
 **字段拆分（强制）**
@@ -646,6 +685,10 @@ PRD 需求（冻结）：
 UI 结构（示意）：
 
 ```
+----------------------------------
+建料模式：Manual（默认；Auto 入口隐藏）
+----------------------------------
+物料编码(code)    [            ]  （必填，手工输入）
 ----------------------------------
 物料种类（分类）选择器 [ 下拉选择 ]  [新增分类]
 ----------------------------------
@@ -694,14 +737,29 @@ UI 结构（示意）：
 
 5. 点击提交时：
 
+   * **Manual 模式下**提交校验顺序（必须固定）：
+     0) **输入标准化**：`code = trim(code)` 且转大写；后续所有校验均基于标准化后的 `code`
+     1) **code 格式校验**：`^[A-Z]{3}[0-9]{7}[A-Z]$`；不满足 → **禁止提交**（`CODE_FORMAT_INVALID`）
+     2) **code 解析**：解析出 `category_code / serial_no / suffix`
+        * `serial_no >= 1`；否则（如 `0000000`）→ **禁止提交**（`CODE_FORMAT_INVALID`）
+        * 若 `suffix` 非 `A-Z` → **禁止提交**（`SUFFIX_INVALID`）
+     3) **分类一致性**：解析出的 `category_code` 必须等于当前选择分类；不一致 → **禁止提交**（`CATEGORY_MISMATCH`）
+     4) **code 唯一**：校验 `UNIQUE(code)`；若冲突 → **禁止提交**并提示“编码已存在”（`CODE_DUPLICATE`）
+     5) **spec 唯一（仅启用态）**：见下条（`SPEC_DUPLICATE`）
    * 生成 `spec_normalized = Normalize(description)`（V1 三步规则）
    * 候选列表**不得**作为唯一性依据
-   * 若触发 `UNIQUE(category_code, spec)` 冲突：**禁止提交**并提示“规格号重复”（错误码：`SPEC_DUPLICATE`）
+   * **spec 唯一性（仅启用态）**：
+     * 若存在 `status=1` 的同分类同 `spec` → **禁止提交**并提示“该规格型号已存在（启用中），禁止重复创建”（错误码：`SPEC_DUPLICATE`）
+     * 若仅存在 `status=0` 的历史记录 → **允许创建新物料**（新记录 / 新 code）；可选弱提示“发现历史废弃规格，将创建新物料记录”
    * 若仅 `spec_normalized` 与某记录相同但 **spec 不同**：允许创建，并可提示“描述归一后相同，请确认是否升级料/替代料”（**不阻止创建**）
 
 错误提示机制（必须结构化）：
 
+* `CODE_FORMAT_INVALID`：显示在 **code（物料编码）** 输入框下（红色提示，“编码格式不正确”）
+* `CATEGORY_MISMATCH`：显示在 **code（物料编码）** 输入框下（红色提示，“编码分类与当前选择分类不一致”）
+* `CODE_DUPLICATE`：显示在 **code（物料编码）** 输入框下（红色提示）
 * `SPEC_DUPLICATE`：显示在 **spec（规格号）** 输入框下（红色提示）
+* `SUFFIX_INVALID`：显示在 **code（物料编码）** 输入框下（红色提示，“编码后缀无效”）
 * `CODE_CONFLICT_RETRY`：全局提示（弹窗或顶部）
 
 状态设计（必须补齐）：
@@ -794,7 +852,7 @@ UI 结构（示意）：
 * **规格号唯一性（分类内）**：
 
   * **spec = 规格号（供应商型号）**，为用户识别物料的核心字段
-  * **唯一性口径（必须修正）**：`UNIQUE(category_code, spec)` **仅约束 `status = 1（正常）` 数据**（已废弃 `status = 0` 不参与 spec 唯一性）
+  * **唯一性口径（必须修正）**：`UNIQUE(category_code, spec) WHERE status = 1`（已废弃 `status = 0` 不参与 spec 唯一性）
   * `spec_normalized` **不参与**唯一性约束（仅搜索辅助）
   * **spec 相同（在 status=1 数据集中）** → 禁止创建（`SPEC_DUPLICATE`）
   * **spec_normalized 相同但 spec 不同** → **仅提示**，不阻止创建
@@ -829,7 +887,7 @@ UI 结构（示意）：
 #### 1. spec（规格号）
 
 * **定义**：规格号（供应商型号），示例：`CL10A106KP8NNNC`
-* **定位**：用户识别物料的核心字段；**分类内唯一**（`UNIQUE(category_code, spec)`）
+* **定位**：用户识别物料的核心字段；**分类内启用态唯一**（`UNIQUE(category_code, spec) WHERE status = 1`）
 * **存储**：原样保存
 
 #### 2. description（规格描述）
@@ -894,6 +952,14 @@ UI 结构（示意）：
 * **展示一致性（冻结）**：UI 列表、搜索结果、导出 Sheet 中 **`status` 语义必须一致**：`1` 展示为 **正常**，`0` 展示为 **已废弃**（同一套映射，禁止各层各写一套文案）
 * **导出一致性**：Sheet1（全量）**含**废弃行；分类 Sheet **仅** `status = 1`；均须带状态列或与 **7.4** 一致
 
+废弃语义（必须明确，冻结）：
+
+* **废弃 = 生命周期终止**，不代表记录删除；废弃后记录仍可查询用于追溯
+* **不允许“复活/恢复”旧记录** 来替代新建（即不允许把 `status=0` 直接改回 `status=1` 以绕过新建流程）
+* 废弃后：
+  * **`code` 永不释放**（全局唯一包含废弃）
+  * **`spec` 可再次使用**：仅允许通过“新建物料”产生 **新记录/新 code**；历史废弃记录保持不变不覆盖
+
 #### 【废弃与替代（V1.3 补充）】
 
 * **不级联**：废弃仅影响当前 `material_item` 行，不级联修改同组其他行
@@ -912,7 +978,7 @@ UI 结构（示意）：
 补充说明：
 
 * **原物料编码（code）不可复用**（纠正须用新编码）
-* **废弃数据仍参与** `UNIQUE(category_code, spec)`（见 **10.1**）
+* **废弃数据不参与 spec 唯一性**：`SPEC_DUPLICATE` 仅由 `status=1` 数据触发；历史废弃记录仅用于追溯与提示（见 **10.1 / 9.1**）
 
 ---
 
@@ -927,7 +993,7 @@ UI 结构（示意）：
 #### V1（必须交付）
 
 * 创建物料（A / B-Z）与替代料体系（A-Z 连续规则保持不变）
-* **规格号 spec 唯一**：`UNIQUE(category_code, spec)`
+* **规格号 spec 唯一（仅启用态）**：`UNIQUE(category_code, spec) WHERE status = 1`
 * **检索**：编码两阶段（前缀→模糊，见 **7.3.1 / 15.3.1**）；规格检索为 **LIKE 子串包含**（见 **6.4.5**），**LIMIT 20**
 * **人工判断替代关系**：系统只提供候选列表与跳转替代料流程，不做自动判定
 
@@ -962,7 +1028,7 @@ UI 结构（示意）：
 V1 约束：
 
 * **不实现**复杂相似度；统一使用 **LIKE 子串包含**（见 **6.4.5**）
-* 候选列表仅辅助人工判断；唯一性仍以 **`UNIQUE(category_code, spec)`** 为准
+* 候选列表仅辅助人工判断；spec 唯一性以 **启用态 `status=1` 数据集**为准（`SPEC_DUPLICATE` 仅由启用态重复触发）
 
 ### 11.3 性能建议
 
@@ -1128,7 +1194,7 @@ CreateMaterialItemA(input)
 1. 调用 `SpecNormalizationService.Normalize(description)` 生成 `spec_normalized`（V1 仅三步规则）
 2. 开启事务（必须）
 3. 执行 INSERT（不允许用相似度绕过唯一性）
-4. 若触发 `UNIQUE(category_code, spec)` 冲突：返回错误 `SPEC_DUPLICATE`（阻止创建）
+4. 若触发 `UNIQUE(category_code, spec) WHERE status = 1` 冲突：返回错误 `SPEC_DUPLICATE`（阻止创建；历史废弃不触发）
 5. 获取流水号（同分类）：
 
    ```text
@@ -1149,6 +1215,46 @@ CreateMaterialItemA(input)
    ```
 10. 提交事务
 11. 若重试仍失败：返回错误 `CODE_CONFLICT_RETRY`
+
+#### 15.1.1.1 新建主物料（A，Manual 手工输入 code）
+
+适用范围（冻结）：
+
+* 仅适用于 **Manual 模式**的“新建物料页面”
+* **不修改** Auto 自动编码规则（Auto 仍按 **15.1.1** 执行）
+
+输入字段（新增/差异）：
+
+* `category_code`（表单选择）
+* `code`（用户手工输入，必须符合格式）
+* 其余字段同 **15.1.1**（`spec/name/description/brand`）
+
+处理流程（必须严格按此实现，禁止复用 Auto 的 max(serial_no)+1）：
+
+校验顺序（必须写死顺序）：
+
+1. **category 是否存在**（`category_code` 不存在或已失效 → **`CATEGORY_NOT_FOUND`**）
+2. **输入标准化**：对用户输入 `code` 执行 `trim()` 并统一转为大写后，再进入后续校验与解析
+3. **code 格式校验**：必须匹配 `^[A-Z]{3}[0-9]{7}[A-Z]$`；否则 → **`CODE_FORMAT_INVALID`**
+4. **code 解析**：
+   * `parsed_category_code = code[0..2]`
+   * `serial_no = int(code[3..9])`（**必须 >= 1**；`0000000` 视为非法 → **`CODE_FORMAT_INVALID`**）
+   * `suffix = code[10]`（非 `A-Z` → **`SUFFIX_INVALID`**）
+5. **分类一致性**：`parsed_category_code` 必须等于表单选择 `category_code`；否则 → **`CATEGORY_MISMATCH`**
+6. **suffix 限制（新建主物料A）**：`suffix` 必须为 `'A'`；否则 → **`SUFFIX_INVALID`**
+7. 生成 `spec_normalized = Normalize(description)`（V1 三步规则）
+8. 开启事务（必须）
+9. **code 唯一**：若触发 `UNIQUE(code)` → **`CODE_DUPLICATE`**
+10. **spec 唯一（仅启用态）**：若触发 `UNIQUE(category_code, spec) WHERE status = 1` → **`SPEC_DUPLICATE`**（历史废弃不触发）
+11. **按指定 serial_no 查找/创建 group（冻结）**：
+    * 查询 `material_group`：`WHERE category_id = ? AND serial_no = ?`
+      * 若存在 → 复用该 `group_id`
+      * 若不存在 → 尝试插入 `material_group(category_id, category_code, serial_no)`（serial_no 取自 code 解析结果）
+        * **并发规则（Manual，冻结）**：若命中 `UNIQUE(category_id, serial_no)`：
+          * 重新查询该 `(category_id, serial_no)` 对应的 `material_group`
+          * 取其 `group_id` 并继续后续流程（不视为业务失败）
+12. 插入 `material_item`（使用用户输入 `code`，且 suffix='A'）
+13. 提交事务
 
 ---
 
@@ -1191,7 +1297,7 @@ CreateMaterialItemReplacement(group_id, input)
 4. 若 `nextSuffix > 'Z'`：回滚并返回错误 `SUFFIX_OVERFLOW`（禁止创建）
 5. 调用 `SpecNormalizationService.Normalize(description)` 生成 `spec_normalized`（V1 仅三步规则）
 6. 执行 INSERT（不允许用相似度绕过唯一性）
-7. 若触发 `UNIQUE(category_code, spec)` 冲突：返回错误 `SPEC_DUPLICATE`（阻止创建）
+7. 若触发 `UNIQUE(category_code, spec) WHERE status = 1` 冲突：返回错误 `SPEC_DUPLICATE`（阻止创建；历史废弃不触发）
 8. 插入 `material_item`（suffix = nextSuffix，code按规则生成；`category_code` 与所属 Group 一致，见 **6.4.2**）
 9. 若发生 `UNIQUE(group_id, suffix)` 冲突：
 
@@ -1232,7 +1338,7 @@ V1 规则（**唯一允许**，必须一致）：
 输出要求：
 
 * `spec_normalized` **仅**用于搜索辅助（LIKE），不参与唯一性
-* 唯一性冲突仅来自 **`UNIQUE(category_code, spec)`**
+* spec 唯一性的硬阻断仅来自 **`UNIQUE(category_code, spec) WHERE status = 1`**（`status=0` 仅保留历史，不触发 `SPEC_DUPLICATE`）
 
 #### 15.2.1 伪代码（可实现级）
 
@@ -1319,7 +1425,7 @@ LIMIT 20;
 
 重要约束（必须强调）：
 
-* 检索结果仅辅助人工判断；唯一性仍以 **`UNIQUE(category_code, spec)`** 为准
+* 检索结果仅辅助人工判断；spec 唯一性仍以 **`UNIQUE(category_code, spec) WHERE status = 1`** 为准
 * `spec_normalized` 相同：**仅提示**，不阻止创建（当 spec 不同）
 
 ---
@@ -1343,7 +1449,11 @@ LIMIT 20;
 
 必须包含（**业务错误码**）：
 
-* `SPEC_DUPLICATE`：规格号重复（同分类下 `spec` 冲突，触发 `UNIQUE(category_code, spec)`）
+* `CODE_FORMAT_INVALID`：Manual 手工输入 `code` 格式不满足 `^[A-Z]{3}[0-9]{7}[A-Z]$`
+* `CATEGORY_MISMATCH`：Manual 手工输入 `code` 解析出的 `category_code` 与表单所选分类不一致
+* `SUFFIX_INVALID`：Manual 手工输入 `code` 的后缀非法，或在“新建主物料A”场景后缀不为 `A`
+* `CODE_DUPLICATE`：编码重复（Manual 手工输入 `code` 冲突，触发 `UNIQUE(code)`；该场景为确定性冲突，不适用重试）
+* `SPEC_DUPLICATE`：规格号重复（同分类下 `status=1` 的 `spec` 冲突，触发 `UNIQUE(category_code, spec) WHERE status = 1`；**历史废弃记录不触发**）
 * `CATEGORY_NOT_FOUND`：`category_code` 不存在或已失效（创建主物料时 category_code 无效；CreateReplacementByCode 过程中解析分类失败；**优先级高于 suffix 分配，必须先校验**）
 * `SUFFIX_OVERFLOW`：**A-Z 后缀耗尽**（逻辑上无法再分配下一后缀，非并发重试问题）
 * `SUFFIX_ALLOCATION_FAILED`：**后缀分配失败**（依赖 `UNIQUE(group_id, suffix)` + 事务级重试后仍冲突，**重试次数达到上限**，与全局 `code` 冲突区分）
@@ -1355,7 +1465,11 @@ LIMIT 20;
 
 | 错误码 | 触发场景 | 是否阻断创建 | UI建议 |
 |---|---|---:|---|
-| SPEC_DUPLICATE | 同分类 `spec` 完全重复（触发 `UNIQUE(category_code, spec)`） | 是 | spec（规格号）输入框红字提示“规格号重复” |
+| CODE_FORMAT_INVALID | Manual 手工输入 `code` 不匹配 `^[A-Z]{3}[0-9]{7}[A-Z]$` | 是 | code 输入框红字提示“编码格式不正确” |
+| CATEGORY_MISMATCH | Manual `code` 解析分类与当前选择分类不一致 | 是 | code 输入框红字提示“编码分类与当前选择分类不一致” |
+| SUFFIX_INVALID | Manual `code` 后缀非法，或新建主物料A但后缀不为 `A` | 是 | code 输入框红字提示“编码后缀无效” |
+| CODE_DUPLICATE | Manual 手工输入 `code` 已存在（触发 `UNIQUE(code)`） | 是 | code（物料编码）输入框红字提示“编码已存在” |
+| SPEC_DUPLICATE | 同分类存在 `status=1` 的同 `spec`（触发 `UNIQUE(category_code, spec) WHERE status = 1`） | 是 | spec（规格号）输入框红字提示“该规格型号已存在（启用中），禁止重复创建” |
 | CATEGORY_NOT_FOUND | `category_code` 不存在或已失效（创建主物料 / 替代料 ByCode 分类解析失败） | 是 | 弹窗/全局提示“分类不存在或已失效” |
 | SUFFIX_OVERFLOW | 同组已连续占满 A–Z，无法再分配下一后缀 | 是 | 弹窗/全局提示“替代料已达上限” |
 | SUFFIX_ALLOCATION_FAILED | 同组 suffix 并发分配，事务级重试（默认最多 3 次）仍失败 | 是 | 弹窗/全局提示“后缀分配失败，请重试”（文案可产品化） |
@@ -1404,7 +1518,10 @@ LIMIT 20;
    * **事务级重试**（回滚后重来；默认 **最多 3 次**）
    * 超过上限时按场景返回：
      * **替代料 suffix 槽位**争用（`UNIQUE(group_id, suffix)`）→ **`SUFFIX_ALLOCATION_FAILED`**
-     * **全局 `code` 唯一**等其他约束 → **`CODE_CONFLICT_RETRY`**
+     * **全局 `code` 唯一**冲突：
+       * **Manual（手工输入）**：确定性重复 → **`CODE_DUPLICATE`**
+       * **Auto（系统生成）**：事务级重试耗尽 → **`CODE_CONFLICT_RETRY`**
+     * 其他唯一约束 → **`CODE_CONFLICT_RETRY`**
 
 适用场景（必须按此实现）：
 
@@ -1797,11 +1914,15 @@ CREATE TABLE material_item (
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
 
     UNIQUE(group_id, suffix),
-    UNIQUE(category_code, spec),
 
     FOREIGN KEY (group_id) REFERENCES material_group(id),
     FOREIGN KEY (category_id) REFERENCES category(id)
 );
+
+-- spec 唯一性（业务规则）：同分类 + 启用态(status=1) 唯一
+CREATE UNIQUE INDEX ux_material_item_category_spec_active
+ON material_item(category_code, spec)
+WHERE status = 1;
 
 -- 结构化字段（V2预留，V1可先建表不强依赖）
 CREATE TABLE material_attribute (
@@ -1830,7 +1951,7 @@ CREATE INDEX idx_material_item_status ON material_item(status);
 
 **CreateMaterialItemA（A件）差异点：**
 
-- **唯一性校验**：仅以 `UNIQUE(category_code, spec)` 为硬阻断；删除任何 `spec_normalized` 唯一性阻断。
+- **唯一性校验（仅启用态）**：仅以 `UNIQUE(category_code, spec) WHERE status = 1` 为硬阻断；删除任何 `spec_normalized` 唯一性阻断。
 - **候选提示（V1）**：当 **LIKE 召回**命中或 `spec_normalized` 与某条相同但 **spec 不同**时：
   - 返回候选列表（Top20）
   - UI 提示：“是否作为替代料？”
@@ -1850,7 +1971,7 @@ CREATE INDEX idx_material_item_status ON material_item(status);
 ### A5. 与原方案差异点（用于评审）
 
 1. **唯一性规则调整（强制）**
-   - 保留：`UNIQUE(category_code, spec)`
+   - 保留：同分类 + 启用态 spec 唯一（建议使用部分唯一索引 `UNIQUE(category_code, spec) WHERE status = 1`）
    - 删除：`UNIQUE(category_code, spec_normalized)`（从 DDL/约束口径/流程/提示文案中全部移除）
 2. **spec_normalized 定位调整**
    - 从“唯一性字段”降级为“基于 description 的搜索辅助字段”；创建流程中候选提示**不阻断**

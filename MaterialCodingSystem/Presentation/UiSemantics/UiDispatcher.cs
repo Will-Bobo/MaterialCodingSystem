@@ -85,6 +85,7 @@ public sealed class WpfUiDispatcher : IUiDispatcher
         switch (s)
         {
             case UiClearStrategy.CreateMaterialSubmit:
+                cm.CodeFieldError = "";
                 cm.SpecFieldError = "";
                 cm.GlobalError = "";
                 cm.Result = "";
@@ -174,6 +175,9 @@ public sealed class WpfUiDispatcher : IUiDispatcher
     {
         switch (propertyName)
         {
+            case UiBindings.CodeFieldError:
+                vm.CodeFieldError = text;
+                break;
             case UiBindings.SpecFieldError:
                 vm.SpecFieldError = text;
                 break;

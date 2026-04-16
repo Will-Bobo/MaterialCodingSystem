@@ -1,6 +1,9 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+    <sys:String x:Key="Error.CodeFormatInvalid">编码格式不正确。</sys:String>
+    <sys:String x:Key="Error.CategoryMismatch">编码分类与当前选择分类不一致。</sys:String>
+    <sys:String x:Key="Error.CodeDuplicate">编码已存在（或同组后缀已占用）。</sys:String>
     <sys:String x:Key="Error.SpecDuplicate">规格号重复（同分类内 spec 已存在）。</sys:String>
     <sys:String x:Key="Error.CodeConflictRetry">系统繁忙，请稍后重试。</sys:String>
     <sys:String x:Key="Error.SuffixOverflow">该组替代料后缀已满，无法继续创建。</sys:String>

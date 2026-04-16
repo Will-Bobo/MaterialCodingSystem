@@ -92,6 +92,13 @@ public sealed class SqliteMaterialRepository : IMaterialRepository
             sql, new { code = categoryCode.Value }, transaction: Tx, cancellationToken: ct));
     }
 
+    public async Task<int?> GetCategoryIdByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default)
+    {
+        var sql = "SELECT id FROM category WHERE code = @code LIMIT 1;";
+        return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
+            sql, new { code = categoryCode.Value }, transaction: Tx, cancellationToken: ct));
+    }
+
     public async Task InsertCategoryAsync(string code, string name, CancellationToken ct = default)
     {
         EnsureWriteTransaction();
@@ -118,7 +125,8 @@ public sealed class SqliteMaterialRepository : IMaterialRepository
 
     public async Task<bool> SpecExistsAsync(CategoryCode categoryCode, Spec spec, CancellationToken ct = default)
     {
-        var sql = "SELECT 1 FROM material_item WHERE category_code = @categoryCode AND spec = @spec LIMIT 1;";
+        // PRD：spec 仅对启用态(status=1)唯一；历史废弃不应触发 SPEC_DUPLICATE
+        var sql = "SELECT 1 FROM material_item WHERE category_code = @categoryCode AND spec = @spec AND status = 1 LIMIT 1;";
         var found = await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
             sql, new { categoryCode = categoryCode.Value, spec = spec.Value }, transaction: Tx, cancellationToken: ct));
         return found is not null;
@@ -153,6 +161,18 @@ SELECT last_insert_rowid();";
             var mapped = MapSqliteUniqueConstraintViolation(ex.Message);
             throw new DbConstraintViolationException(mapped, ex.Message);
         }
+    }
+
+    public async Task<int?> GetGroupIdByCategoryAndSerialNoAsync(int categoryId, int serialNo, CancellationToken ct = default)
+    {
+        var sql = """
+                  SELECT id
+                  FROM material_group
+                  WHERE category_id = @categoryId AND serial_no = @serialNo
+                  LIMIT 1;
+                  """;
+        return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
+            sql, new { categoryId, serialNo }, transaction: Tx, cancellationToken: ct));
     }
 
     public async Task InsertItemAsync(int groupId, MaterialItem item, CancellationToken ct = default)

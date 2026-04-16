@@ -81,6 +81,9 @@ public static class UiResourceKeys
 {
     public static class Error
     {
+        public const string CodeFormatInvalid = "Error.CodeFormatInvalid";
+        public const string CategoryMismatch = "Error.CategoryMismatch";
+        public const string CodeDuplicate = "Error.CodeDuplicate";
         public const string SpecDuplicate = "Error.SpecDuplicate";
         public const string CodeConflictRetry = "Error.CodeConflictRetry";
         public const string SuffixOverflow = "Error.SuffixOverflow";

@@ -48,13 +48,12 @@ public sealed class WpfUiRenderer : IUiRenderer
 
     public bool ConfirmCreateMaterial(CreateMaterialConfirmModel model)
     {
-        var body =
-            $"规格号：{model.Spec}\n" +
-            $"规格描述：{model.Description}\n" +
-            $"名称：{model.Name}\n" +
-            $"品牌：{model.Brand}";
-
-        return _dialogs.Confirm("确认创建主物料", body);
+        var dlg = new CreateMaterialConfirmWindow(model)
+        {
+            Owner = System.Windows.Application.Current?.MainWindow
+        };
+        var r = dlg.ShowDialog();
+        return r == true;
     }
 
     public bool ConfirmCreateReplacement(CreateReplacementConfirmModel model)

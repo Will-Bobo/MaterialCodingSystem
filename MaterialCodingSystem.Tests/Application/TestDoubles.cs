@@ -48,6 +48,7 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
     public int FailGroupInsertWithSerialConflictTimes { get; set; }
     public int FailItemInsertWithCategorySpecTimes { get; set; }
     public int FailItemInsertWithSuffixConflictTimes { get; set; }
+    public int FailItemInsertWithCodeConflictTimes { get; set; }
 
     public Task<bool> CategoryExistsAsync(CategoryCode categoryCode, CancellationToken ct = default)
         => Task.FromResult(CategoryExists);
@@ -57,6 +58,11 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
         CategoryNameCalls++;
         return Task.FromResult<string?>(CategoryExists ? CategoryName : null);
     }
+
+    public int CategoryId { get; set; } = 1;
+
+    public Task<int?> GetCategoryIdByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default)
+        => Task.FromResult<int?>(CategoryExists ? CategoryId : null);
 
     /// <summary>若设置，则 <see cref="InsertCategoryAsync"/> 抛出与 SQLite 类似的唯一约束信息，供 CreateCategory 映射测试使用。</summary>
     public string? InsertCategoryConstraintViolationMessage { get; set; }
@@ -101,9 +107,23 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
         return Task.FromResult(1);
     }
 
+    public int? GroupIdByCategoryAndSerialNo { get; set; } = 1;
+
+    public Task<int?> GetGroupIdByCategoryAndSerialNoAsync(int categoryId, int serialNo, CancellationToken ct = default)
+        => Task.FromResult(GroupIdByCategoryAndSerialNo);
+
     public Task InsertItemAsync(int groupId, MaterialItem item, CancellationToken ct = default)
     {
         InsertItemCalled++;
+
+        if (FailItemInsertWithCodeConflictTimes > 0)
+        {
+            FailItemInsertWithCodeConflictTimes--;
+            throw new DbConstraintViolationException(
+                IMaterialRepository.CONSTRAINT_ITEM_CODE,
+                "code conflict"
+            );
+        }
 
         if (FailItemInsertWithCategorySpecTimes > 0)
         {

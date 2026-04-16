@@ -113,6 +113,7 @@ public sealed class CreateMaterialViewModelTests
 
         await Task.Delay(150);
         vm.SelectedCategory = vm.Categories.First(c => c.Code == "ZDA");
+        vm.Code = "ZDA0000001A";
         vm.Spec = "S1";
         vm.Name = "n";
         vm.Description = "D1";
@@ -134,6 +135,7 @@ public sealed class CreateMaterialViewModelTests
 
         await Task.Delay(150);
         vm.SelectedCategory = vm.Categories.First(c => c.Code == "ZDA");
+        vm.Code = "ZDA0000001A";
         vm.Spec = "S1";
         vm.Description = "   ";
 
@@ -148,6 +150,7 @@ public sealed class CreateMaterialViewModelTests
 
         await Task.Delay(150);
         vm.SelectedCategory = vm.Categories.First(c => c.Code == "ZDA");
+        vm.Code = "ZDA0000001A";
         vm.Spec = "S1";
         vm.Description = "D";
         vm.Brand = "   ";
@@ -165,6 +168,7 @@ public sealed class CreateMaterialViewModelTests
 
         await Task.Delay(150);
         vm.SelectedCategory = vm.Categories.First(c => c.Code == "ZDA");
+        vm.Code = "ZDA0000001A";
         vm.NotifySpecFieldFocused();
         vm.Spec = "S1";
         vm.Description = "   ";
@@ -183,6 +187,7 @@ public sealed class CreateMaterialViewModelTests
 
         await Task.Delay(150);
         vm.SelectedCategory = vm.Categories.First(c => c.Code == "ZDA");
+        vm.Code = "ZDA0000001A";
         vm.NotifySpecFieldFocused();
         vm.Spec = "S1";
         vm.Description = "D";
@@ -201,6 +206,7 @@ public sealed class CreateMaterialViewModelTests
 
         await Task.Delay(150);
         vm.SelectedCategory = vm.Categories.First(c => c.Code == "ZDA");
+        vm.Code = "ZDA0000001A";
         vm.NotifySpecFieldFocused();
         vm.Spec = "S1";
         vm.Description = "D";
@@ -223,6 +229,7 @@ public sealed class CreateMaterialViewModelTests
 
         await Task.Delay(150);
         vm.SelectedCategory = vm.Categories.First(c => c.Code == "ZDA");
+        vm.Code = "ZDA0000001A";
         vm.NotifySpecFieldFocused();
 
         vm.Spec = "1234";
@@ -249,6 +256,7 @@ public sealed class CreateMaterialViewModelTests
 
         await Task.Delay(150);
         vm.SelectedCategory = vm.Categories.First(c => c.Code == "ZDA");
+        vm.Code = "ZDA0000001A";
         vm.NotifySpecFieldFocused();
         vm.Spec = "S1";
         vm.Description = "";

@@ -9,6 +9,18 @@ public static class UiPolicy
     public static UiRenderPlan Resolve(AppError error, ContextType context) =>
         (error.Code, context) switch
         {
+            (ErrorCodes.CODE_FORMAT_INVALID, ContextType.CreateMaterialCreate) => Plan(
+                error.Code, context, UiSeverity.Warning, UiPresentation.Inline,
+                UiResourceKeys.Error.CodeFormatInvalid, UiBindings.CodeFieldError),
+
+            (ErrorCodes.CATEGORY_MISMATCH, ContextType.CreateMaterialCreate) => Plan(
+                error.Code, context, UiSeverity.Warning, UiPresentation.Inline,
+                UiResourceKeys.Error.CategoryMismatch, UiBindings.CodeFieldError),
+
+            (ErrorCodes.CODE_DUPLICATE, ContextType.CreateMaterialCreate) => Plan(
+                error.Code, context, UiSeverity.Warning, UiPresentation.Inline,
+                UiResourceKeys.Error.CodeDuplicate, UiBindings.CodeFieldError),
+
             (ErrorCodes.SPEC_DUPLICATE, ContextType.CreateMaterialCreate) => Plan(
                 error.Code, context, UiSeverity.Warning, UiPresentation.Inline,
                 UiResourceKeys.Error.SpecDuplicate, UiBindings.SpecFieldError),
