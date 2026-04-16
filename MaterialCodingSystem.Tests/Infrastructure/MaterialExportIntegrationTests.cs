@@ -71,8 +71,13 @@ VALUES
             using var wb = new XLWorkbook(path);
             // Sheet1 + 2 category sheets
             Assert.Equal(3, wb.Worksheets.Count);
-            Assert.NotNull(wb.Worksheet("全量"));
-            var zda = wb.Worksheet("ZDA");
+            Assert.NotNull(wb.Worksheet("电子总表"));
+            var zda = wb.Worksheet("R（ZDA）");
+            Assert.Equal(30d, zda.Row(1).Height);
+            Assert.Equal(30d, zda.Row(2).Height);
+            Assert.Equal(XLAlignmentVerticalValues.Center, zda.Cell(2, 1).Style.Alignment.Vertical);
+            Assert.Equal(XLBorderStyleValues.Thin, zda.Cell(2, 1).Style.Border.LeftBorder);
+            Assert.Equal("宋体", zda.Cell(2, 1).Style.Font.FontName);
             // columns: code, name, description, spec, brand, status
             Assert.Equal("ZDA0000001A", zda.Cell(2, 1).GetString());
             Assert.Equal("R", zda.Cell(2, 2).GetString()); // name from category

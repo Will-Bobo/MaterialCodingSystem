@@ -6,23 +6,30 @@ namespace MaterialCodingSystem.Infrastructure.Excel;
 
 public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
 {
+    private const double RowHeight = 30d;
+    private const int ColCount = 6;
+    private const string ExportFontName = "宋体";
+
     public Task WriteAsync(string filePath, IReadOnlyList<MaterialExportRow> rows, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         using var wb = new XLWorkbook();
 
         // Sheet1：全量
-        var all = wb.Worksheets.Add("全量");
+        var all = wb.Worksheets.Add("电子总表");
         WriteHeader(all);
-        WriteRows(all, rows);
+        var allLastRow = WriteRows(all, rows);
+        ApplyTableStyle(all, allLastRow);
 
         // 分类 Sheet：每个分类一个 Sheet（含废弃）
         foreach (var group in rows.GroupBy(r => r.CategoryCode).OrderBy(g => g.Key, StringComparer.Ordinal))
         {
-            var sheetName = SanitizeSheetName(group.Key);
+            var categoryName = group.FirstOrDefault()?.Name ?? "";
+            var sheetName = SanitizeSheetName($"{categoryName}（{group.Key}）");
             var ws = wb.Worksheets.Add(sheetName);
             WriteHeader(ws);
-            WriteRows(ws, group);
+            var lastRow = WriteRows(ws, group);
+            ApplyTableStyle(ws, lastRow);
         }
 
         // 无数据：仅保留 Sheet1 表头
@@ -43,9 +50,11 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
         ws.Cell(1, 4).Value = "规格号";
         ws.Cell(1, 5).Value = "品牌";
         ws.Cell(1, 6).Value = "状态";
+
+        ws.Row(1).Height = RowHeight;
     }
 
-    private static void WriteRows(IXLWorksheet ws, IEnumerable<MaterialExportRow> rows)
+    private static int WriteRows(IXLWorksheet ws, IEnumerable<MaterialExportRow> rows)
     {
         var ordered = rows
             .OrderByDescending(r => r.Status)
@@ -60,6 +69,7 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
         var row = 2;
         foreach (var item in ordered)
         {
+            ws.Row(row).Height = RowHeight;
             var statusText = item.Status == 1 ? "正常" : "已废弃";
             ws.Cell(row, 1).Value = item.Code;
             ws.Cell(row, 2).Value = item.Name;
@@ -71,6 +81,26 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
             statusCell.Style.Font.FontColor = item.Status == 1 ? ok : bad;
             row++;
         }
+
+        return row - 1; // last row index (>=1)
+    }
+
+    private static void ApplyTableStyle(IXLWorksheet ws, int lastRow)
+    {
+        if (lastRow < 1) lastRow = 1;
+        var r = ws.Range(1, 1, lastRow, ColCount);
+
+        // 字体统一：宋体
+        r.Style.Font.FontName = ExportFontName;
+
+        // 垂直居中
+        r.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+        // 黑色直线边框（含内外）
+        r.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        r.Style.Border.OutsideBorderColor = XLColor.Black;
+        r.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+        r.Style.Border.InsideBorderColor = XLColor.Black;
     }
 
     private static void AutoFitAll(XLWorkbook wb)
