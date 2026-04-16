@@ -1,4 +1,5 @@
 using Dapper;
+using MaterialCodingSystem.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
 
 namespace MaterialCodingSystem.Validation.core;
@@ -14,20 +15,24 @@ public sealed class SqliteDbFixture : DbFixture
     {
         Connection = new SqliteConnection("Data Source=:memory:");
         Connection.Open();
-        CreateSchema();
+        EnsureSchema();
     }
 
     public override void Reset()
     {
         _raw.Clear();
         _seedSeq = 0;
-        // recreate schema by dropping tables; simplest for deterministic tests
+        // Recreate schema deterministically (single connection per plan).
+        // Keep this list aligned to Infrastructure.Sqlite.SqliteSchema.
         Connection.Execute("""
+                           DROP TABLE IF EXISTS create_request_log;
+                           DROP TABLE IF EXISTS material_attribute;
                            DROP TABLE IF EXISTS material_item;
                            DROP TABLE IF EXISTS material_group;
                            DROP TABLE IF EXISTS category;
+                           DROP TABLE IF EXISTS app_meta;
                            """);
-        CreateSchema();
+        EnsureSchema();
     }
 
     public override void Seed(Dictionary<string, object?>? data)
@@ -190,48 +195,9 @@ public sealed class SqliteDbFixture : DbFixture
         return found is not null;
     }
 
-    private void CreateSchema()
+    private void EnsureSchema()
     {
-        Connection.Execute("""
-                           CREATE TABLE category (
-                             id INTEGER PRIMARY KEY AUTOINCREMENT,
-                             code TEXT NOT NULL UNIQUE,
-                             name TEXT NOT NULL UNIQUE,
-                             created_at TEXT DEFAULT CURRENT_TIMESTAMP
-                           );
-                           
-                           CREATE TABLE material_group (
-                             id INTEGER PRIMARY KEY AUTOINCREMENT,
-                             category_id INTEGER NOT NULL,
-                             category_code TEXT NOT NULL,
-                             serial_no INTEGER NOT NULL,
-                             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                             UNIQUE(category_id, serial_no),
-                             FOREIGN KEY(category_id) REFERENCES category(id)
-                           );
-                           
-                           CREATE TABLE material_item (
-                             id INTEGER PRIMARY KEY AUTOINCREMENT,
-                             group_id INTEGER NOT NULL,
-                             category_id INTEGER NOT NULL,
-                             category_code TEXT NOT NULL,
-                             code TEXT NOT NULL UNIQUE,
-                             suffix TEXT NOT NULL,
-                             name TEXT NOT NULL,
-                             description TEXT NOT NULL,
-                             spec TEXT NOT NULL,
-                             spec_normalized TEXT NOT NULL,
-                             brand TEXT,
-                             status INTEGER NOT NULL DEFAULT 1,
-                             is_structured INTEGER DEFAULT 0,
-                             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                             UNIQUE(group_id, suffix),
-                             UNIQUE(category_code, spec),
-                             FOREIGN KEY(group_id) REFERENCES material_group(id),
-                             FOREIGN KEY(category_id) REFERENCES category(id),
-                             CHECK(status IN (0,1))
-                           );
-                           """);
+        SqliteSchema.EnsureCreated(Connection);
     }
 
     private static Dictionary<string, object?>? NormalizeMap(object? v)

@@ -29,6 +29,24 @@ meta:
     DB_RESTORE_003: [contract_only, echo]
   prd_freeze:
     version: "2026-04-13"
+    identifier_policy:
+      category:
+        domain_key: category_code
+        storage_key: category_id
+        rule: "ALL DB operations MUST use category_id"
+        exception: "only parsing / UI display may use category_code"
+    start_serial_no_policy:
+      type: warning_only
+      override_allowed: true
+      affects_generation: false
+      affects_validation: false
+    suffix_semantics:
+      A: anchor_item
+      B-Z: replacement_items
+    group_resolution:
+      input: category_id + serial_no
+      output: group_id
+      uniqueness: true
     name_policy:
       source: category.name
       persistence: snapshot
@@ -43,19 +61,24 @@ meta:
         创建时在与插入同一事务、同一连接内读取 category.name 并写入 material_item.name 快照；
         后续分类改名不级联更新已有物料 name。
     replacement_creation:
-      mode: by_code
-      input: base_material_code
+      mode: by_group_id
+      input: group_id
       behavior:
-        - 系统根据 base_material_code 解析所属组并完成替代料创建编排
-        - 用户不感知 group 或 groupId（Presentation 层禁止暴露）
+        - 系统以 group_id 为唯一事实锚点完成替代料创建编排（现有实现入口）
+        - Presentation 层禁止暴露“通过 code 解析 group”的入口（当前系统无该入参/DTO/字段）
       constraint:
         - 基准物料必须 status = 1（正常）
       error:
         deprecated_anchor: ANCHOR_ITEM_DEPRECATED
+      group_lifecycle_semantics:
+        suffix_A:
+          rule: "suffix == 'A' 可创建 group（主料路径）"
+        suffix_not_A:
+          rule: "suffix != 'A' 必须依赖已存在 group，禁止创建 group（替代料路径）"
       transaction:
         single_transaction: true
         steps:
-          - group_resolve
+          - group_load
           - suffix_allocate
           - item_insert
         concurrency: suffix_unique_via_db_constraint_and_retry
@@ -69,6 +92,11 @@ meta:
           on_conflict: retry
         failure_error: SUFFIX_ALLOCATION_FAILED
       overflow_error: SUFFIX_OVERFLOW
+      continuity:
+        required: false
+        note: |
+          suffix 不要求连续；删除导致 gap 合法；
+          gap 不阻止新增；仅保留 UNIQUE(group_id, suffix)。
     status:
       active: 1
       deprecated: 0
@@ -294,6 +322,7 @@ cases:
         group_id: 1
         spec: CL10A106KP8NNND
         description: 10uF 16V 0603 X5R
+        brand: TEST_BRAND
 
     when:
       action: create_material_replacement
@@ -312,10 +341,10 @@ cases:
 
 
 # =====================================================
-# 6. suffix连续性约束（核心规则）
+# 6. suffix gap 合法（不要求连续；允许补位）
 # =====================================================
-  - id: SUFFIX_SEQUENCE_BROKEN_001
-    title: suffix不连续禁止创建（与 Application SUFFIX_SEQUENCE_BROKEN 一致）
+  - id: SUFFIX_GAP_ALLOWED_001
+    title: suffix 不连续为合法状态（A/C 存在仍允许创建 B）
     type: core
 
     given:
@@ -329,13 +358,20 @@ cases:
       input:
         group_id: 1
         spec: xxx
+        description: d
+        brand: TEST_BRAND
 
     when:
       action: create_material_replacement
 
     then:
-      error:
-        code: SUFFIX_SEQUENCE_BROKEN
+      output:
+        code: ZDA0000001B
+
+      db:
+        material_item:
+          exists:
+            suffix: B
 
     replay: true
     deterministic: true
@@ -385,6 +421,7 @@ cases:
       input:
         group_id: 1
         spec: xxx
+        brand: TEST_BRAND
 
     when:
       action: create_material_replacement
@@ -648,10 +685,10 @@ cases:
 
 
 # =====================================================
-# 14. suffix policy（删除中间 suffix 后数据不连续 → 与缺口场景同一错误码）
+# 14. suffix policy（gap 不影响新增；允许补位）
 # =====================================================
-  - id: SUFFIX_POLICY_AMBIGUITY_001
-    title: 删除中间 suffix 后仅存 A/C（不连续）禁止创建替代料
+  - id: SUFFIX_POLICY_GAP_001
+    title: 删除中间 suffix 造成 gap 为合法；仍允许新增并可补位
     type: invariant
 
     given:
@@ -665,13 +702,15 @@ cases:
       input:
         group_id: 1
         spec: xxx
+        description: d
+        brand: TEST_BRAND
 
     when:
       action: create_material_replacement
 
     then:
-      error:
-        code: SUFFIX_SEQUENCE_BROKEN
+      output:
+        code: ZDA0000001B
 
     replay: true
     deterministic: true
@@ -877,6 +916,7 @@ cases:
         group_id: 1
         spec: SUFFIX_RETRY_SPEC_001
         description: d
+        brand: TEST_BRAND
 
     when:
       action: create_material_replacement
@@ -946,6 +986,7 @@ cases:
         group_id: 1
         spec: ANCHOR_DEP_SPEC_B
         description: d2
+        brand: TEST_BRAND
 
     when:
       action: create_material_replacement
