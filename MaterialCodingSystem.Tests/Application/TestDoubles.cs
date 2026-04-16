@@ -26,6 +26,9 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
     public bool CategoryExists { get; set; } = true;
     public string CategoryName { get; set; } = "默认分类";
     public bool SpecExists { get; set; }
+    public int CategoryId { get; set; } = 1;
+    public int CategoryStartSerialNo { get; set; } = 1;
+    public List<string> CategoryCodes { get; } = new() { "ZDA" };
 
     public int MaxSerialNo { get; set; }
 
@@ -61,26 +64,50 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
     /// <summary>若设置，则 <see cref="InsertCategoryAsync"/> 抛出与 SQLite 类似的唯一约束信息，供 CreateCategory 映射测试使用。</summary>
     public string? InsertCategoryConstraintViolationMessage { get; set; }
 
-    public Task InsertCategoryAsync(string code, string name, CancellationToken ct = default)
+    public Task<int?> GetCategoryIdByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default)
+        => Task.FromResult<int?>(CategoryExists ? CategoryId : null);
+
+    public Task<int> GetCategoryStartSerialNoAsync(int categoryId, CancellationToken ct = default)
+        => Task.FromResult(CategoryStartSerialNo);
+
+    public Task InsertCategoryAsync(string code, string name, int startSerialNo, CancellationToken ct = default)
     {
         if (InsertCategoryConstraintViolationMessage is not null)
         {
             throw new DbConstraintViolationException("UNIQUE(category)", InsertCategoryConstraintViolationMessage);
         }
 
+        CategoryStartSerialNo = startSerialNo;
         return Task.CompletedTask;
     }
 
-    public List<(string Code, string Name)> CategoryRows { get; } = new() { ("ZDA", "默认分类") };
+    public List<(string Code, string Name, int StartSerialNo)> CategoryRows { get; } = new() { ("ZDA", "默认分类", 1) };
 
-    public Task<IReadOnlyList<(string Code, string Name)>> ListCategoriesAsync(CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<(string Code, string Name)>>(CategoryRows.ToList());
+    public Task<IReadOnlyList<(string Code, string Name, int StartSerialNo)>> ListCategoriesAsync(CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<(string Code, string Name, int StartSerialNo)>>(CategoryRows.ToList());
 
     public Task<bool> SpecExistsAsync(CategoryCode categoryCode, Spec spec, CancellationToken ct = default)
         => Task.FromResult(SpecExists);
 
     public Task<int> GetMaxSerialNoAsync(CategoryCode categoryCode, CancellationToken ct = default)
         => Task.FromResult(MaxSerialNo);
+
+    public Task<int?> GetGroupIdByCategoryIdAndSerialNoAsync(int categoryId, int serialNo, CancellationToken ct = default)
+        => Task.FromResult<int?>(GroupExists ? 1 : null);
+
+    public Task<IReadOnlyList<string>> ListCategoryCodesAsync(CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<string>>(CategoryCodes.ToList());
+
+    public CreateMaterialResponse? ExistingRequestLog { get; set; }
+
+    public Task<CreateMaterialResponse?> GetCreateMaterialSuccessByRequestIdAsync(string requestId, CancellationToken ct = default)
+        => Task.FromResult(ExistingRequestLog);
+
+    public Task InsertCreateMaterialSuccessLogAsync(string requestId, CreateMaterialResponse response, CancellationToken ct = default)
+    {
+        ExistingRequestLog = response;
+        return Task.CompletedTask;
+    }
 
     public Task<int> InsertGroupAsync(CategoryCode categoryCode, int serialNo, CancellationToken ct = default)
     {

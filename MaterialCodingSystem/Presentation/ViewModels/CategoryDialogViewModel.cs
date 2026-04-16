@@ -16,6 +16,9 @@ public sealed class CategoryDialogViewModel : ViewModelBase
     private string _name = "";
     public string Name { get => _name; set => SetProperty(ref _name, value); }
 
+    private string _startSerialNo = "1";
+    public string StartSerialNo { get => _startSerialNo; set => SetProperty(ref _startSerialNo, value); }
+
     private string _error = "";
     public string Error { get => _error; set => SetProperty(ref _error, value); }
 
@@ -32,7 +35,14 @@ public sealed class CategoryDialogViewModel : ViewModelBase
     private async Task SaveAsync(Action closeWithSuccess)
     {
         Error = "";
-        var res = await _app.CreateCategory(new CreateCategoryRequest(Code, Name));
+
+        if (!int.TryParse((StartSerialNo ?? "").Trim(), out var startSerialNo) || startSerialNo < 1)
+        {
+            Error = "自动编码起始值必须为整数且 >= 1。";
+            return;
+        }
+
+        var res = await _app.CreateCategory(new CreateCategoryRequest(Code, Name, startSerialNo));
         if (!res.IsSuccess)
         {
             var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.CategoryDialogSave);

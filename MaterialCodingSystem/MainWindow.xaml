@@ -18,6 +18,7 @@
         <conv:StatusToIsActiveBoolConverter x:Key="StatusToIsActiveBool"/>
         <conv:StatusToBrushConverter x:Key="StatusToBrush"/>
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVis"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
         <Style TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI"/>
@@ -139,6 +140,33 @@
                                                 <Button Padding="12,4" Content="刷新" Command="{Binding CreateMaterial.RefreshCategoriesCommand}"/>
                                                 <Button Padding="12,4" Margin="8,0,0,0" Content="新增分类…" Command="{Binding CreateMaterial.OpenAddCategoryCommand}"/>
                                             </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="编码方式" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <RadioButton Content="自动生成"
+                                                             GroupName="CreateMaterialCodeMode"
+                                                             IsChecked="{Binding CreateMaterial.IsAutoMode, Mode=TwoWay}"
+                                                             Margin="0,0,12,0"/>
+                                                <RadioButton Content="输入已有物料编码"
+                                                             GroupName="CreateMaterialCodeMode"
+                                                             IsChecked="{Binding CreateMaterial.IsManualMode, Mode=TwoWay}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12"
+                                            Visibility="{Binding CreateMaterial.IsManualExistingCodeMode, Converter={StaticResource BoolToVis}}">
+                                        <StackPanel>
+                                            <TextBlock Text="物料编码（历史编码）" FontWeight="SemiBold"/>
+                                            <TextBlock Foreground="{StaticResource Brush.Text.Muted}" FontSize="11" Margin="0,4,0,0"
+                                                       Text="格式示例：ZDA0000123A（末位 suffix 支持 A-Z）"/>
+                                            <TextBox Style="{StaticResource ModernTextBox}"
+                                                     Margin="0,4,0,0"
+                                                     Text="{Binding CreateMaterial.ExistingCode, UpdateSourceTrigger=PropertyChanged}"/>
                                         </StackPanel>
                                     </Border>
 

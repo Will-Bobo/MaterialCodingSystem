@@ -136,7 +136,7 @@ public class CreateMaterialItemATests
     [Fact]
     public async Task CreateA_Success_ReturnsCodeSuffixA_AndNormalizedFromDescription()
     {
-        var repo = new FakeMaterialRepository { CategoryExists = true, SpecExists = false, MaxSerialNo = 0 };
+        var repo = new FakeMaterialRepository { CategoryExists = true, SpecExists = false, MaxSerialNo = 0, CategoryStartSerialNo = 1 };
         var app = new MaterialApplicationService(uow: new NoopUnitOfWork(), repo: repo);
 
         var res = await app.CreateMaterialItemA(new CreateMaterialItemARequest(
@@ -154,6 +154,234 @@ public class CreateMaterialItemATests
         Assert.Equal(1, repo.InsertGroupCalled);
         Assert.Equal(1, repo.InsertItemCalled);
         Assert.Equal(new CategoryCode("ZDA"), repo.LastInsertedGroupCategoryCode);
+    }
+
+    [Fact]
+    public async Task CreateA_WhenStartSerialNo5000_AndNoExisting_FirstAutoIs5000()
+    {
+        var repo = new FakeMaterialRepository
+        {
+            CategoryExists = true,
+            SpecExists = false,
+            MaxSerialNo = 0,
+            CategoryStartSerialNo = 5000
+        };
+        var app = new MaterialApplicationService(uow: new NoopUnitOfWork(), repo: repo);
+
+        var res = await app.CreateMaterialItemA(new CreateMaterialItemARequest(
+            CategoryCode: "ZDA",
+            Spec: "S5000",
+            Name: "n",
+            Description: "d",
+            Brand: "b"
+        ));
+
+        Assert.True(res.IsSuccess);
+        Assert.Equal("ZDA0005000A", res.Data!.Code);
+    }
+
+    [Fact]
+    public async Task CreateA_WhenStartSerialNo5000_AndMax5008_NextIs5009()
+    {
+        var repo = new FakeMaterialRepository
+        {
+            CategoryExists = true,
+            SpecExists = false,
+            MaxSerialNo = 5008,
+            CategoryStartSerialNo = 5000
+        };
+        var app = new MaterialApplicationService(uow: new NoopUnitOfWork(), repo: repo);
+
+        var res = await app.CreateMaterialItemA(new CreateMaterialItemARequest(
+            CategoryCode: "ZDA",
+            Spec: "S5009",
+            Name: "n",
+            Description: "d",
+            Brand: "b"
+        ));
+
+        Assert.True(res.IsSuccess);
+        Assert.Equal("ZDA0005009A", res.Data!.Code);
+    }
+
+    [Fact]
+    public async Task ManualExistingCode_WhenAboveStartSerialNo_ReturnsRequiresConfirmation()
+    {
+        var repo = new FakeMaterialRepository
+        {
+            CategoryExists = true,
+            SpecExists = false,
+            CategoryStartSerialNo = 5000,
+            GroupExists = false
+        };
+        var app = new MaterialApplicationService(uow: new NoopUnitOfWork(), repo: repo);
+
+        var res = await app.CreateMaterial(new CreateMaterialRequest(
+            CategoryCode: "ZDA",
+            Spec: "S1",
+            Name: "n",
+            Description: "d",
+            Brand: "b",
+            CodeMode: CreateMaterialCodeMode.ManualExistingCode,
+            ExistingCode: "ZDA0005001A",
+            ForceConfirm: false
+        ));
+
+        Assert.True(res.IsSuccess);
+        Assert.True(res.Data!.RequiresConfirmation);
+        Assert.Equal("MANUAL_CODE_ABOVE_START", res.Data.WarningCode);
+    }
+
+    [Fact]
+    public async Task ManualExistingCode_SuffixB_WhenGroupNotExists_Fails()
+    {
+        var repo = new FakeMaterialRepository
+        {
+            CategoryExists = true,
+            SpecExists = false,
+            CategoryStartSerialNo = 1,
+            GroupExists = false
+        };
+        var app = new MaterialApplicationService(uow: new NoopUnitOfWork(), repo: repo);
+
+        var res = await app.CreateMaterial(new CreateMaterialRequest(
+            CategoryCode: "ZDA",
+            Spec: "S1",
+            Name: "n",
+            Description: "d",
+            Brand: "b",
+            CodeMode: CreateMaterialCodeMode.ManualExistingCode,
+            ExistingCode: "ZDA0000123B",
+            ForceConfirm: true
+        ));
+
+        Assert.False(res.IsSuccess);
+        Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error!.Code);
+    }
+
+    [Fact]
+    public async Task ManualExistingCode_WhenGroupExistsWithOnlyB_CanInsertA_WithoutCreatingGroupAgain()
+    {
+        var repo = new FakeMaterialRepository
+        {
+            CategoryExists = true,
+            SpecExists = false,
+            CategoryStartSerialNo = 1,
+            GroupExists = true
+        };
+        repo.CategoryCodes.Clear();
+        repo.CategoryCodes.Add("ZDA");
+
+        var app = new MaterialApplicationService(uow: new NoopUnitOfWork(), repo: repo);
+
+        var res = await app.CreateMaterial(new CreateMaterialRequest(
+            CategoryCode: "ZDA",
+            Spec: "S-A",
+            Name: "n",
+            Description: "d",
+            Brand: "b",
+            CodeMode: CreateMaterialCodeMode.ManualExistingCode,
+            ExistingCode: "ZDA0000123A",
+            ForceConfirm: true
+        ));
+
+        Assert.True(res.IsSuccess);
+        Assert.Equal("ZDA0000123A", res.Data!.Code);
+        Assert.Equal(0, repo.InsertGroupCalled);
+        Assert.Equal(1, repo.InsertItemCalled);
+    }
+
+    [Fact]
+    public async Task CreateMaterial_WhenSameRequestId_SubmitTwice_SecondReturnsFirstResult()
+    {
+        var repo = new FakeMaterialRepository
+        {
+            CategoryExists = true,
+            SpecExists = false,
+            MaxSerialNo = 0,
+            CategoryStartSerialNo = 1
+        };
+        repo.CategoryCodes.Clear();
+        repo.CategoryCodes.Add("ZDA");
+
+        var app = new MaterialApplicationService(uow: new NoopUnitOfWork(), repo: repo);
+
+        var req = new CreateMaterialRequest(
+            CategoryCode: "ZDA",
+            Spec: "S1",
+            Name: "n",
+            Description: "d",
+            Brand: "b",
+            CodeMode: CreateMaterialCodeMode.Auto,
+            RequestId: "RID-1"
+        );
+
+        var r1 = await app.CreateMaterial(req);
+        var r2 = await app.CreateMaterial(req);
+
+        Assert.True(r1.IsSuccess);
+        Assert.True(r2.IsSuccess);
+        Assert.Equal(r1.Data!.Code, r2.Data!.Code);
+    }
+
+    [Fact]
+    public async Task Parser_WhenCategoryCodesOverlap_LongestPrefixMatched()
+    {
+        var repo = new FakeMaterialRepository
+        {
+            CategoryExists = true,
+            SpecExists = false,
+            CategoryStartSerialNo = 1,
+            GroupExists = true
+        };
+        repo.CategoryCodes.Clear();
+        repo.CategoryCodes.AddRange(new[] { "ZD", "ZDA", "ZDAA" });
+
+        var app = new MaterialApplicationService(uow: new NoopUnitOfWork(), repo: repo);
+
+        var res = await app.CreateMaterial(new CreateMaterialRequest(
+            CategoryCode: "ZDA",
+            Spec: "S1",
+            Name: "n",
+            Description: "d",
+            Brand: "b",
+            CodeMode: CreateMaterialCodeMode.ManualExistingCode,
+            ExistingCode: "ZDA0000123A",
+            ForceConfirm: true
+        ));
+
+        Assert.True(res.IsSuccess);
+        Assert.Equal("ZDA0000123A", res.Data!.Code);
+    }
+
+    [Fact]
+    public async Task Parser_WhenNoCategoryPrefixMatched_ReturnsValidationError()
+    {
+        var repo = new FakeMaterialRepository
+        {
+            CategoryExists = true,
+            SpecExists = false,
+            CategoryStartSerialNo = 1,
+            GroupExists = true
+        };
+        repo.CategoryCodes.Clear();
+        repo.CategoryCodes.AddRange(new[] { "ZD", "ZDA" });
+
+        var app = new MaterialApplicationService(uow: new NoopUnitOfWork(), repo: repo);
+
+        var res = await app.CreateMaterial(new CreateMaterialRequest(
+            CategoryCode: "ZDA",
+            Spec: "S1",
+            Name: "n",
+            Description: "d",
+            Brand: "b",
+            CodeMode: CreateMaterialCodeMode.ManualExistingCode,
+            ExistingCode: "XXX0000123A",
+            ForceConfirm: true
+        ));
+
+        Assert.False(res.IsSuccess);
+        Assert.Equal(ErrorCodes.VALIDATION_ERROR, res.Error!.Code);
     }
 
     [Fact]

@@ -46,6 +46,8 @@ public sealed class CreateMaterialViewModelTests
 
         public bool ConfirmCreateMaterial(CreateMaterialConfirmModel model) => true;
 
+        public bool ConfirmWarning(string title, string body) => true;
+
         public bool ConfirmCreateReplacement(CreateReplacementConfirmModel model) => true;
 
         public Task<bool> ConfirmDeprecateAsync(DeprecateConfirmModel model) => Task.FromResult(true);
@@ -92,7 +94,7 @@ public sealed class CreateMaterialViewModelTests
     public async Task When_description_field_active_does_not_trigger_candidate_search()
     {
         var repo = new FakeMaterialRepository();
-        repo.CategoryRows.Add(("ZDB", "电容"));
+        repo.CategoryRows.Add(("ZDB", "电容", 1));
         repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "P", "10UF 16V", "N", null, 1, 1));
         var vm = CreateVm(repo);
 

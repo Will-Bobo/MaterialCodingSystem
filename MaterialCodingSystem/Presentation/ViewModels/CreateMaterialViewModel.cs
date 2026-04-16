@@ -38,6 +38,63 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
     private (string CategoryCode, string SpecTrim)? _allowedKey;
 
+    private CreateMaterialCodeMode _codeMode = CreateMaterialCodeMode.Auto;
+    public CreateMaterialCodeMode CodeMode
+    {
+        get => _codeMode;
+        set
+        {
+            if (SetProperty(ref _codeMode, value))
+            {
+                NotifyPropertyChanged(nameof(IsManualExistingCodeMode));
+                NotifyPropertyChanged(nameof(IsAutoMode));
+                NotifyPropertyChanged(nameof(IsManualMode));
+
+                // Manual mode: disable candidate logic and force idle
+                if (_codeMode == CreateMaterialCodeMode.ManualExistingCode)
+                {
+                    KeywordSource = MaterialSearchKeywordSource.None;
+                    ClearCandidatesAndDecisionUi();
+                }
+                RefreshDerivedState();
+                CreateCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool IsManualExistingCodeMode => CodeMode == CreateMaterialCodeMode.ManualExistingCode;
+
+    public bool IsAutoMode
+    {
+        get => CodeMode == CreateMaterialCodeMode.Auto;
+        set
+        {
+            if (value)
+                CodeMode = CreateMaterialCodeMode.Auto;
+        }
+    }
+
+    public bool IsManualMode
+    {
+        get => CodeMode == CreateMaterialCodeMode.ManualExistingCode;
+        set
+        {
+            if (value)
+                CodeMode = CreateMaterialCodeMode.ManualExistingCode;
+        }
+    }
+
+    private string _existingCode = "";
+    public string ExistingCode
+    {
+        get => _existingCode;
+        set
+        {
+            if (SetProperty(ref _existingCode, value))
+                RefreshDerivedState();
+        }
+    }
+
     public bool IsForceCreateAllowed
     {
         get
@@ -155,6 +212,15 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(specTrim))
             return CreateMaterialState.Empty;
 
+        if (IsManualExistingCodeMode)
+        {
+            if (string.IsNullOrWhiteSpace(ExistingCode?.Trim()))
+                return CreateMaterialState.MissingRequiredFields;
+            if (string.IsNullOrWhiteSpace(Description?.Trim()) || string.IsNullOrWhiteSpace(Brand?.Trim()))
+                return CreateMaterialState.MissingRequiredFields;
+            return CreateMaterialState.ReadyToCreate;
+        }
+
         // 1) 完全匹配：最高优先级，硬阻断
         if (HasExactSpecMatch)
             return CreateMaterialState.CandidateConflict;
@@ -183,6 +249,17 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
     private string _result = "";
     public string Result { get => _result; set => SetProperty(ref _result, value); }
+
+    private bool _isSubmitting;
+    public bool IsSubmitting
+    {
+        get => _isSubmitting;
+        set
+        {
+            if (SetProperty(ref _isSubmitting, value))
+                CreateCommand.RaiseCanExecuteChanged();
+        }
+    }
 
     private string _specFieldError = "";
     public string SpecFieldError
@@ -349,6 +426,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         if (DecisionState == CreateDecisionState.Success)
             return false;
         if (CandidateLoading)
+            return false;
+        if (IsSubmitting)
             return false;
         return State == CreateMaterialState.ReadyToCreate;
     }
@@ -680,23 +759,61 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     {
         ClearCreateMaterialSubmitFeedback();
         Result = UiResources.Get(UiResourceKeys.Info.CreateMaterialProcessing);
+        IsSubmitting = true;
         var categoryCode = SelectedCategory?.Code?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(categoryCode))
         {
             Result = UiResources.Get(UiResourceKeys.Hint.SelectCategory);
+            IsSubmitting = false;
             return;
         }
 
-        var res = await _app.CreateMaterialItemA(new CreateMaterialItemARequest(
+        var res = await _app.CreateMaterial(new CreateMaterialRequest(
             CategoryCode: categoryCode,
             Spec: Spec,
             Name: Name,
             Description: Description,
-            Brand: string.IsNullOrWhiteSpace(Brand) ? null : Brand
+            Brand: string.IsNullOrWhiteSpace(Brand) ? null : Brand,
+            CodeMode: CodeMode,
+            ExistingCode: IsManualExistingCodeMode ? ExistingCode : null,
+            ForceConfirm: false
         ));
 
         if (res.IsSuccess)
         {
+            // warning + confirm (manual-only)
+            if (res.Data!.RequiresConfirmation)
+            {
+                var ok = _uiRenderer.ConfirmWarning("需要确认", res.Data.Message ?? "需要确认后继续。");
+                if (!ok)
+                {
+                    Result = "已取消。";
+                    IsSubmitting = false;
+                    return;
+                }
+
+                // second submit with force_confirm
+                res = await _app.CreateMaterial(new CreateMaterialRequest(
+                    CategoryCode: categoryCode,
+                    Spec: Spec,
+                    Name: Name,
+                    Description: Description,
+                    Brand: string.IsNullOrWhiteSpace(Brand) ? null : Brand,
+                    CodeMode: CodeMode,
+                    ExistingCode: IsManualExistingCodeMode ? ExistingCode : null,
+                    ForceConfirm: true
+                ));
+
+                if (!res.IsSuccess)
+                {
+                    var plan2 = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.CreateMaterialCreate);
+                    _uiDispatcher.Apply(plan2, this);
+                    UpdateSpecInputStateHint();
+                    IsSubmitting = false;
+                    return;
+                }
+            }
+
             Result = UiResources.Format(
                 UiResourceKeys.Info.CreateMaterialCreateSuccess,
                 res.Data!.Code,
@@ -706,13 +823,16 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             ClearCandidatesAndDecisionUi();
             SetDecisionState(CreateDecisionState.Success);
             ClearInputsAfterSuccess();
+            ExistingCode = "";
             RefreshDerivedState();
+            IsSubmitting = false;
             return;
         }
 
         var plan = _uiRenderer.BuildRenderPlan(res.Error!, ContextType.CreateMaterialCreate);
         _uiDispatcher.Apply(plan, this);
         UpdateSpecInputStateHint();
+        IsSubmitting = false;
     }
 
     private void ClearCreateMaterialSubmitFeedback()

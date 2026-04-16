@@ -1,6 +1,7 @@
-# 物料编码系统 PRD（V1.3 规则冻结稿）
+# 物料编码系统 PRD（V1.4 历史编码兼容版）
 
-> **版本说明（V1.3）**：本章档与自动化校验规格 `MaterialCodingSystem.Validation/specs/PRD_V1.yaml` 中 `meta.prd_freeze` **对齐**。若正文其他小节与「V1.3 冻结口径」冲突，**以冻结口径为准**（实现与测试应随后续迭代收敛到冻结语义）。
+> **版本说明（V1.4）**：在 **V1.3 规则冻结口径**基础上，增量补充“历史编码兼容建料模式”与“分类起始流水号（start_serial_no）”能力。  
+> 自动化校验规格 `MaterialCodingSystem.Validation/specs/PRD_V1.yaml` 中 `meta.prd_freeze` 仍作为“冻结语义基线”；若正文其他小节与「冻结口径」冲突，**以冻结口径为准**（实现与测试应随后续迭代收敛到冻结语义）。
 
 ## 一、项目背景
 
@@ -28,6 +29,7 @@
 4. 快速检索（编码 / 规格号 / 规格描述）
 5. Excel 导出
 6. 【对齐PRD新增】数据库备份与恢复（手动导出 / 启动自动备份 / 覆盖式恢复）
+7. 【V1.4新增】历史物料编码兼容建料（自动生成编码 / 输入已有历史编码）
 
 ---
 
@@ -44,6 +46,7 @@
 * 【对齐PRD新增】数据库手动导出（完整可恢复）
 * 【对齐PRD新增】启动自动备份（静默、保留多版本）
 * 【对齐PRD新增】数据恢复（覆盖当前数据、恢复到备份时刻、失败不破坏当前数据）
+* 【V1.4新增】新建主物料支持两种方式：自动生成编码（默认）/ 输入已有历史物料编码（兼容旧料号）
 
 ### ❌ 不包含
 
@@ -130,11 +133,45 @@ ZDA0000001A
 * 仅在新建“主物料（A）”时占用流水号
 * 替代料（B-Z）不占用流水号
 
+**V1.4 升级：按分类起始流水号生成（历史编码兼容）**
+
+自动生成主物料编码（A）时，`serial_no` 的下一个建议值定义为：
+
+\[
+next\_serial\_no = \max(\text{该分类已存在最大 }serial\_no,\ start\_serial\_no - 1) + 1
+\]
+
+说明：
+
+1. 首次自动生成时不得小于 `start_serial_no`
+2. 若该分类已存在更大 `serial_no`，则继续递增
+3. 自动流水号永不回退
+
+**V1.4 新增：自动编码与历史编码共存规则（必须明确）**
+
+1. 手工录入历史编码不影响自动流水号回退：自动编码永远按“该分类当前最大 `serial_no` 与 `start_serial_no`”计算下一个值
+2. 自动编码始终按最大 `serial_no` 递增（结合 `start_serial_no` 下限），不会因为手工录入较小历史编码而回退
+3. 已存在编码不得重复创建：`UNIQUE(code)` 冲突必须拒绝
+
+示例（V1.4）：
+
+已有：
+
+* `ZDA0000123A`
+* `ZDA0005000A`
+* `ZDA0005001A`
+
+下一次自动生成：
+
+* `ZDA0005002A`
+
 ---
 
 ## 六、数据模型
 
 V1.2 仍采用三表模型：`Category`（分类）/ `MaterialGroup`（主档）/ `MaterialItem`（实例）。
+
+> **V1.4 增量说明（历史编码兼容版）**：在不改变三表结构与既有规则的前提下，为 `Category` 增加 `start_serial_no`，并在“新建主物料（A）”流程中支持“输入已有历史物料编码”模式；自动编码流水号生成规则按 **5.2** 升级。
 
 ---
 
@@ -145,6 +182,21 @@ V1.2 仍采用三表模型：`Category`（分类）/ `MaterialGroup`（主档）
 | id | int | 主键 |
 | code | string | 分类编码（唯一） |
 | name | string | 分类名称（唯一） |
+| start_serial_no | int | **自动编码起始流水号（V1.4新增）**：该分类自动生成主物料编码时的起始流水号（见 **5.2 / 6.4.4 / 15.1.1**） |
+
+约束（V1.4新增）：
+
+* 必填
+* `>= 1`
+* 创建分类时录入
+* 可修改（仅允许管理员）
+
+示例（V1.4新增）：
+
+| code | name | start_serial_no |
+|------|------|-----------------|
+| ZDA  | 电阻 | 5000            |
+| ZDB  | 电容 | 8000            |
 
 ---
 
@@ -272,6 +324,8 @@ MaterialItem（物料实例 A-Z）
 #### 6.4.3 推荐DDL（可直接执行，SQLite）
 
 > 说明：为支持“同分类 spec 唯一”与检索过滤，建议在 `material_item` 冗余 `category_code`。
+>
+> 【V1.4迁移说明】新增字段：`Category.start_serial_no INTEGER NOT NULL DEFAULT 1`（见本 DDL 中 `category` 表）。
 
 ```sql
 -- 分类表
@@ -279,6 +333,7 @@ CREATE TABLE category (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     code        TEXT NOT NULL UNIQUE,   -- ZDA/ZDB...
     name        TEXT NOT NULL UNIQUE,   -- 电阻/电容...
+    start_serial_no INTEGER NOT NULL DEFAULT 1, -- V1.4：自动编码起始流水号（>=1）
     created_at  TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -366,7 +421,8 @@ V1 **仅允许**三步：
 
 新建主物料（A）：
 
-* 在事务内按 `category_id` 查询最大 `serial_no`，+1 后插入 `material_group`
+* 在事务内按 `category_id` 查询该分类最大 `serial_no`，并结合 `Category.start_serial_no` 计算下一个流水号后插入 `material_group`（V1.4）
+  * 公式：`next_serial_no = MAX(max_serial_no, start_serial_no - 1) + 1`
 * 插入 `material_item`（suffix = 'A'），生成 `code = category_code + serial_no(7位补零) + 'A'`
 * 若出现并发导致 `UNIQUE(category_id, serial_no)` 冲突，则重试生成
 
@@ -412,18 +468,33 @@ LIMIT 20;
 
    * 分类下拉/选择器仅展示**系统内已存在的分类**
    * 若无目标分类，点击“新增分类”打开独立窗口新增（新增后可回填到选择器）
-2. **分别填写（必填，禁止单框混写）**：
+2. 【V1.4新增】选择编码方式（创建方式）：
+
+   * （默认）自动生成编码
+   * 输入已有物料编码（历史编码兼容）
+
+3. **分别填写（必填，禁止单框混写）**：
 
    * **规格号（spec）**：供应商型号（示例：`CL10A106KP8NNNC`）
    * **规格描述（description）**：完整规格字符串（示例：`10uF 16V 0603 X5R`）
-3. 用户输入 **description** 或 **spec** 后触发（300ms 防抖）：按 **6.4.5** 执行规格搜索，返回 **Top 20** 候选（人工判断是否重复/是否走替代料）
-4. 提交时系统执行：
+4. 【当选择“输入已有物料编码”时（V1.4新增）】显示并填写“物料编码（历史编码）”，示例：`ZDA0000123A`。系统需解析并校验：
+
+   * `category_code` 必须存在
+   * 编码格式合法（`[分类编码]+[7位数字流水号]+[A-Z]`）
+   * `serial_no >= 1`
+   * `suffix` 合法（A-Z）
+   * `code` 全局唯一（已存在则禁止创建）
+
+   通过后允许直接创建记录；该手工录入不影响后续自动流水号回退（见 **5.2**）。
+
+5. 用户输入 **description** 或 **spec** 后触发（300ms 防抖）：按 **6.4.5** 执行规格搜索，返回 **Top 20** 候选（人工判断是否重复/是否走替代料）
+6. 提交时系统执行：
 
    * 生成 `spec_normalized = Normalize(description)`（仅 V1 三步规则，见第 10 章/第 15 章）
    * **唯一性**：若同分类 **spec 已存在** → 禁止保存（`SPEC_DUPLICATE`）
    * **提示**：若仅 `spec_normalized` 与某条记录相同（但 spec 不同）→ **仅提示**，不阻止创建
-   * 生成编码（如 `ZDA0000001A`）
-   * 创建 Group + Item(A)
+   * 若选择“自动生成编码”：按 **5.2** 规则计算流水号并生成编码（如 `ZDA0005000A`）
+   * 若选择“输入已有物料编码”：使用输入编码解析出的 `category_code/serial_no/suffix` 创建 Group + Item
 
 ---
 
@@ -649,6 +720,13 @@ UI 结构（示意）：
 ----------------------------------
 物料种类（分类）选择器 [ 下拉选择 ]  [新增分类]
 ----------------------------------
+编码方式：
+(●) 自动生成
+( ) 输入已有物料编码
+
+若选择“输入已有物料编码”，显示：
+物料编码：[________]  （示例：ZDA0000123A）
+
 规格号(spec)     [            ]  （必填）
 规格描述(desc)  [            ]  （必填）
 ----------------------------------
@@ -698,6 +776,9 @@ UI 结构（示意）：
    * 候选列表**不得**作为唯一性依据
    * 若触发 `UNIQUE(category_code, spec)` 冲突：**禁止提交**并提示“规格号重复”（错误码：`SPEC_DUPLICATE`）
    * 若仅 `spec_normalized` 与某记录相同但 **spec 不同**：允许创建，并可提示“描述归一后相同，请确认是否升级料/替代料”（**不阻止创建**）
+   * 【V1.4新增】若选择“输入已有物料编码”：
+     * 必须先通过“历史编码解析与校验”（见 **7.1**）再创建
+     * 创建成功后进入与“自动生成编码”一致的后续体验（候选提示仅辅助，不替代唯一性约束）
 
 错误提示机制（必须结构化）：
 
@@ -1134,7 +1215,13 @@ CreateMaterialItemA(input)
    ```text
    SELECT MAX(serial_no) FROM material_group WHERE category_id=?
    ```
-6. `serial_no = (max_serial_no ?? 0) + 1`
+6. 【V1.4升级】`serial_no` 计算规则：
+
+   ```text
+   next_serial_no = MAX(max_serial_no, start_serial_no - 1) + 1
+   ```
+
+   其中 `start_serial_no` 来自 `Category.start_serial_no`（必填，>=1）。
 7. 插入 `material_group`（`category_id`,`category_code`,`serial_no`）
 8. 插入 `material_item`（suffix = 'A'）：
 
@@ -1747,6 +1834,15 @@ SearchQuery {
 * 不重复（依赖 `UNIQUE(category_id, serial_no)`、`UNIQUE(group_id, suffix)`、`UNIQUE(code)`）
 * 冲突时能重试，超过3次返回 `CODE_CONFLICT_RETRY`
 
+### 17.4 【V1.4新增】历史编码兼容与起始流水号测试（必须）
+
+1. 分类起始值 5000，首次自动生成 = 5000
+2. 已存在最大流水号 5008，再自动生成 = 5009
+3. 手工录入历史编码 `ZDA0000123A` 后，自动生成仍从该分类 `start_serial_no` 起（例如 5000，不回退）
+4. 手工录入历史编码 `ZDA0008000A` 后，若该分类当前最大流水号为 8000，则下一次自动生成 = 8001
+5. 重复历史编码录入失败（`UNIQUE(code)` 冲突）
+6. 非法编码格式录入失败（分类不存在 / suffix 非 A-Z / serial_no < 1 / 非法长度等）
+
 ---
 
 ## 附录A：本次“工程一致性修正评估”最终输出（V1.2 修订补丁）
@@ -1761,6 +1857,7 @@ CREATE TABLE category (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     code        TEXT NOT NULL UNIQUE,   -- ZDA/ZDB...
     name        TEXT NOT NULL UNIQUE,   -- 电阻/电容...
+    start_serial_no INTEGER NOT NULL DEFAULT 1, -- V1.4：自动编码起始流水号（>=1）
     created_at  TEXT DEFAULT CURRENT_TIMESTAMP
 );
 

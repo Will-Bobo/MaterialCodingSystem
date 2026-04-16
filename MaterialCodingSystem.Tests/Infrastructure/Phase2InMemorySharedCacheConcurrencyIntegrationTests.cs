@@ -14,11 +14,70 @@ namespace MaterialCodingSystem.Tests.Infrastructure;
 public class Phase2InMemorySharedCacheConcurrencyIntegrationTests
 {
     [Fact]
+    public async Task ParallelCreateA_TwoThreads_100Each_NoDuplicateSerialOrCode()
+    {
+        var name = $"mcs_phase2_100_{Guid.NewGuid():N}";
+        await using var db = await SqliteTestDb.CreateSharedAsync(name);
+        await db.Connection.ExecuteAsync("INSERT INTO category(code,name,start_serial_no) VALUES ('ZDA','电阻',1);");
+
+        const int perThread = 100;
+        var bag = new ConcurrentBag<(bool Ok, string? Code)>();
+
+        await Task.WhenAll(
+            Task.Run(async () =>
+            {
+                await Parallel.ForEachAsync(Enumerable.Range(0, perThread), async (i, ct) =>
+                {
+                    await using var conn = new SqliteConnection(db.ConnectionString);
+                    await conn.OpenAsync(ct);
+                    var app = new MaterialApplicationService(new SqliteUnitOfWork(conn), new SqliteMaterialRepository(conn));
+                    var res = await app.CreateMaterialItemA(new CreateMaterialItemARequest(
+                        CategoryCode: "ZDA",
+                        Spec: $"SPEC-T1-{i}",
+                        Name: "n",
+                        Description: "d",
+                        Brand: "b"
+                    ), ct);
+                    bag.Add((res.IsSuccess, res.Data?.Code));
+                });
+            }),
+            Task.Run(async () =>
+            {
+                await Parallel.ForEachAsync(Enumerable.Range(0, perThread), async (i, ct) =>
+                {
+                    await using var conn = new SqliteConnection(db.ConnectionString);
+                    await conn.OpenAsync(ct);
+                    var app = new MaterialApplicationService(new SqliteUnitOfWork(conn), new SqliteMaterialRepository(conn));
+                    var res = await app.CreateMaterialItemA(new CreateMaterialItemARequest(
+                        CategoryCode: "ZDA",
+                        Spec: $"SPEC-T2-{i}",
+                        Name: "n",
+                        Description: "d",
+                        Brand: "b"
+                    ), ct);
+                    bag.Add((res.IsSuccess, res.Data?.Code));
+                });
+            })
+        );
+
+        Assert.Equal(perThread * 2, bag.Count);
+        Assert.All(bag, x => Assert.True(x.Ok));
+
+        var codes = bag.Select(x => x.Code!).ToList();
+        Assert.Equal(codes.Count, codes.Distinct().Count());
+
+        var serials = (await db.Connection.QueryAsync<int>(
+            "SELECT serial_no FROM material_group WHERE category_code='ZDA' ORDER BY serial_no;")).ToList();
+        Assert.Equal(perThread * 2, serials.Count);
+        Assert.Equal(serials.Count, serials.Distinct().Count());
+    }
+
+    [Fact]
     public async Task ParallelCreateA_DifferentSpecs_AllSucceed_UniqueSerials()
     {
         var name = $"mcs_phase2_{Guid.NewGuid():N}";
         await using var db = await SqliteTestDb.CreateSharedAsync(name);
-        await db.Connection.ExecuteAsync("INSERT INTO category(code,name) VALUES ('ZDA','电阻');");
+        await db.Connection.ExecuteAsync("INSERT INTO category(code,name,start_serial_no) VALUES ('ZDA','电阻',1);");
 
         const int n = 12;
         var bag = new ConcurrentBag<bool>();
@@ -52,7 +111,7 @@ public class Phase2InMemorySharedCacheConcurrencyIntegrationTests
     {
         var name = $"mcs_phase2_same_{Guid.NewGuid():N}";
         await using var db = await SqliteTestDb.CreateSharedAsync(name);
-        await db.Connection.ExecuteAsync("INSERT INTO category(code,name) VALUES ('ZDA','电阻');");
+        await db.Connection.ExecuteAsync("INSERT INTO category(code,name,start_serial_no) VALUES ('ZDA','电阻',1);");
 
         const int n = 20;
         var bag = new ConcurrentBag<(bool Ok, string? Err)>();
@@ -83,7 +142,7 @@ public class Phase2InMemorySharedCacheConcurrencyIntegrationTests
     {
         var name = $"mcs_phase2_repl_{Guid.NewGuid():N}";
         await using var db = await SqliteTestDb.CreateSharedAsync(name);
-        await db.Connection.ExecuteAsync("INSERT INTO category(code,name) VALUES ('ZDA','电阻');");
+        await db.Connection.ExecuteAsync("INSERT INTO category(code,name,start_serial_no) VALUES ('ZDA','电阻',1);");
 
         var initConn = db.Connection;
         var initApp = new MaterialApplicationService(new SqliteUnitOfWork(initConn), new SqliteMaterialRepository(initConn));
@@ -133,7 +192,7 @@ public class Phase2InMemorySharedCacheConcurrencyIntegrationTests
     {
         var name = $"mcs_phase2_repl_same_{Guid.NewGuid():N}";
         await using var db = await SqliteTestDb.CreateSharedAsync(name);
-        await db.Connection.ExecuteAsync("INSERT INTO category(code,name) VALUES ('ZDA','电阻');");
+        await db.Connection.ExecuteAsync("INSERT INTO category(code,name,start_serial_no) VALUES ('ZDA','电阻',1);");
 
         var initApp = new MaterialApplicationService(new SqliteUnitOfWork(db.Connection), new SqliteMaterialRepository(db.Connection));
         var a = await initApp.CreateMaterialItemA(new CreateMaterialItemARequest(

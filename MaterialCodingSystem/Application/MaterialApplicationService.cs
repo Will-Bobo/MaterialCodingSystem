@@ -40,10 +40,15 @@ public sealed class MaterialApplicationService
 
             var code = req.Code.Trim().ToUpperInvariant();
             var name = req.Name.Trim();
+            var startSerialNo = req.StartSerialNo <= 0 ? 1 : req.StartSerialNo;
+            if (startSerialNo < 1)
+            {
+                return Result<CreateCategoryResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "start_serial_no must be >= 1.");
+            }
 
             try
             {
-                await _repo.InsertCategoryAsync(code, name, ct);
+                await _repo.InsertCategoryAsync(code, name, startSerialNo, ct);
             }
             catch (DbConstraintViolationException ex) when (
                 ex.Constraint.Contains("category", StringComparison.OrdinalIgnoreCase)
@@ -64,14 +69,14 @@ public sealed class MaterialApplicationService
                 return Result<CreateCategoryResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "category duplicate.");
             }
 
-            return Result<CreateCategoryResponse>.Ok(new CreateCategoryResponse(code, name));
+            return Result<CreateCategoryResponse>.Ok(new CreateCategoryResponse(code, name, startSerialNo));
         }, ct);
 
     public Task<Result<IReadOnlyList<CategoryDto>>> ListCategories(CancellationToken ct = default)
         => _uow.ExecuteAsync(async () =>
         {
             var rows = await _repo.ListCategoriesAsync(ct);
-            var items = rows.Select(x => new CategoryDto(x.Code, x.Name)).ToList();
+            var items = rows.Select(x => new CategoryDto(x.Code, x.Name, x.StartSerialNo)).ToList();
             return Result<IReadOnlyList<CategoryDto>>.Ok(items);
         }, ct);
 
@@ -160,17 +165,55 @@ public sealed class MaterialApplicationService
             return Result<int>.Ok(max + 1);
         }, ct);
 
-    public Task<Result<CreateMaterialItemAResponse>> CreateMaterialItemA(CreateMaterialItemARequest req, CancellationToken ct = default)
+    public async Task<Result<CreateMaterialItemAResponse>> CreateMaterialItemA(CreateMaterialItemARequest req, CancellationToken ct = default)
+    {
+        var res = await CreateMaterial(new CreateMaterialRequest(
+            CategoryCode: req.CategoryCode,
+            Spec: req.Spec,
+            Name: req.Name,
+            Description: req.Description,
+            Brand: req.Brand,
+            CodeMode: CreateMaterialCodeMode.Auto
+        ), ct);
+
+        if (!res.IsSuccess)
+        {
+            return Result<CreateMaterialItemAResponse>.Fail(
+                res.Error!.Code,
+                res.Error.Message,
+                res.Error.ValidationErrors ?? new Dictionary<string, string>());
+        }
+
+        var d = res.Data!;
+        return Result<CreateMaterialItemAResponse>.Ok(new CreateMaterialItemAResponse(
+            GroupId: d.GroupId,
+            CategoryCode: d.CategoryCode,
+            SerialNo: d.SerialNo,
+            Code: d.Code,
+            Suffix: d.Suffix,
+            Spec: d.Spec,
+            SpecNormalized: d.SpecNormalized
+        ));
+    }
+
+    public Task<Result<CreateMaterialResponse>> CreateMaterial(CreateMaterialRequest req, CancellationToken ct = default)
         => ExecuteWithRetry(async () =>
         {
-            if (string.IsNullOrWhiteSpace(req.Description))
+            // Idempotency (success-only): same RequestId returns first success result
+            if (!string.IsNullOrWhiteSpace(req.RequestId))
             {
-                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "description is required.");
+                var existing = await _repo.GetCreateMaterialSuccessByRequestIdAsync(req.RequestId!, ct);
+                if (existing is not null)
+                {
+                    return Result<CreateMaterialResponse>.Ok(existing);
+                }
             }
+
+            if (string.IsNullOrWhiteSpace(req.Description))
+                return Result<CreateMaterialResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "description is required.");
 
             CategoryCode categoryCode;
             Spec spec;
-
             try
             {
                 categoryCode = new CategoryCode(req.CategoryCode);
@@ -178,85 +221,225 @@ public sealed class MaterialApplicationService
             }
             catch (DomainException ex) when (ex.Code == "VALIDATION_ERROR")
             {
-                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.VALIDATION_ERROR, ex.Message);
+                return Result<CreateMaterialResponse>.Fail(ErrorCodes.VALIDATION_ERROR, ex.Message);
             }
 
-            var categoryExists = await _repo.CategoryExistsAsync(categoryCode, ct);
-            if (!categoryExists)
-            {
-                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.CATEGORY_NOT_FOUND, "category_code not found.");
-            }
+            var categoryId = await _repo.GetCategoryIdByCodeAsync(categoryCode, ct);
+            if (categoryId is null)
+                return Result<CreateMaterialResponse>.Fail(ErrorCodes.CATEGORY_NOT_FOUND, "category_code not found.");
 
             var categoryName = await _repo.GetCategoryNameByCodeAsync(categoryCode, ct);
             if (string.IsNullOrWhiteSpace(categoryName))
-            {
-                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.CATEGORY_NOT_FOUND, "category_code not found.");
-            }
+                return Result<CreateMaterialResponse>.Fail(ErrorCodes.CATEGORY_NOT_FOUND, "category_code not found.");
 
+            // Auto/manual share spec uniqueness (per existing rules)
             var specExists = await _repo.SpecExistsAsync(categoryCode, spec, ct);
             if (specExists)
+                return Result<CreateMaterialResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
+
+            var startSerialNo = await _repo.GetCategoryStartSerialNoAsync(categoryId.Value, ct);
+
+            if (req.CodeMode == CreateMaterialCodeMode.Auto)
             {
-                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
+                var maxSerial = await _repo.GetMaxSerialNoAsync(categoryCode, ct);
+                var serialNo = Math.Max(maxSerial, startSerialNo - 1) + 1;
+
+                int groupId;
+                try
+                {
+                    groupId = await _repo.InsertGroupAsync(categoryCode, serialNo, ct);
+                }
+                catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_GROUP_CATEGORY_SERIAL)
+                {
+                    throw;
+                }
+
+                var group = MaterialGroup.CreateNew(
+                    categoryCode: categoryCode,
+                    serialNo: serialNo,
+                    spec: spec,
+                    name: categoryName,
+                    description: req.Description,
+                    brand: req.Brand
+                );
+
+                var itemA = group.Items.Single(i => i.Suffix.Value == 'A');
+                try
+                {
+                    await _repo.InsertItemAsync(groupId, itemA, ct);
+                }
+                catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CATEGORY_SPEC)
+                {
+                    return Result<CreateMaterialResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
+                }
+                catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CODE)
+                {
+                    return Result<CreateMaterialResponse>.Fail(ErrorCodes.CODE_CONFLICT_RETRY, "code conflict.");
+                }
+
+                var ok = new CreateMaterialResponse(
+                    GroupId: groupId,
+                    CategoryCode: categoryCode.Value,
+                    SerialNo: serialNo,
+                    Code: itemA.Code,
+                    Suffix: "A",
+                    Spec: itemA.Spec.Value,
+                    SpecNormalized: itemA.SpecNormalized.Value
+                );
+
+                if (!string.IsNullOrWhiteSpace(req.RequestId))
+                {
+                    try
+                    {
+                        await _repo.InsertCreateMaterialSuccessLogAsync(req.RequestId!, ok, ct);
+                    }
+                    catch (DbConstraintViolationException)
+                    {
+                        var existing = await _repo.GetCreateMaterialSuccessByRequestIdAsync(req.RequestId!, ct);
+                        if (existing is not null)
+                            return Result<CreateMaterialResponse>.Ok(existing);
+                    }
+                }
+
+                return Result<CreateMaterialResponse>.Ok(ok);
             }
 
-            var maxSerial = await _repo.GetMaxSerialNoAsync(categoryCode, ct);
-            var serialNo = maxSerial + 1;
+            // Manual existing code
+            if (string.IsNullOrWhiteSpace(req.ExistingCode))
+                return Result<CreateMaterialResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "existing_code is required.");
 
-            int groupId;
+            var normalizedExisting = req.ExistingCode.Trim().ToUpperInvariant();
+            var codes = await _repo.ListCategoryCodesAsync(ct);
+            var matched = codes
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c.Trim().ToUpperInvariant())
+                .Where(c => normalizedExisting.StartsWith(c, StringComparison.Ordinal))
+                .Where(c => normalizedExisting.Length - c.Length == 8)
+                .OrderByDescending(c => c.Length)
+                .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(matched))
+                return Result<CreateMaterialResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "existing_code category_code invalid.");
+
+            ParsedMaterialCode parsed;
             try
             {
-                groupId = await _repo.InsertGroupAsync(categoryCode, serialNo, ct);
+                parsed = MaterialCodeParser.ParseExistingCodeWithCategory(normalizedExisting, matched);
             }
-            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_GROUP_CATEGORY_SERIAL)
+            catch (DomainException ex) when (ex.Code == "VALIDATION_ERROR")
             {
-                // 触发 serial_no 并发冲突，交由外层事务级重试
-                throw;
-            }
-            catch (DbConstraintViolationException)
-            {
-                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.INTERNAL_ERROR, "unexpected constraint on insert group.");
+                return Result<CreateMaterialResponse>.Fail(ErrorCodes.VALIDATION_ERROR, ex.Message);
             }
 
-            var group = MaterialGroup.CreateNew(
-                categoryCode: categoryCode,
-                serialNo: serialNo,
+            if (!string.Equals(parsed.CategoryCode, categoryCode.Value, StringComparison.Ordinal))
+                return Result<CreateMaterialResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "existing_code category_code mismatch.");
+
+            var existingCodeRaw = parsed.NormalizedCode;
+            var serialNoManual = parsed.SerialNo;
+            var suffixChar = parsed.Suffix;
+
+            // warning+confirm
+            if (!req.ForceConfirm && serialNoManual > startSerialNo)
+            {
+                return Result<CreateMaterialResponse>.Ok(new CreateMaterialResponse(
+                    GroupId: 0,
+                    CategoryCode: categoryCode.Value,
+                    SerialNo: serialNoManual,
+                    Code: existingCodeRaw,
+                    Suffix: suffixChar.ToString(),
+                    Spec: spec.Value,
+                    SpecNormalized: new SpecNormalized(SpecNormalizer.NormalizeV1(req.Description)).Value,
+                    RequiresConfirmation: true,
+                    WarningCode: "MANUAL_CODE_ABOVE_START",
+                    Message: "当前输入编码已超过该分类自动起始值，确认该物料属于新编号区间"
+                ));
+            }
+
+            // group resolution by category_id + serial_no
+            var existingGroupId = await _repo.GetGroupIdByCategoryIdAndSerialNoAsync(categoryId.Value, serialNoManual, ct);
+
+            if (suffixChar != 'A')
+            {
+                if (existingGroupId is null)
+                    return Result<CreateMaterialResponse>.Fail(ErrorCodes.VALIDATION_ERROR, $"不存在 {CodeGenerator.GenerateItemCode(categoryCode.Value, serialNoManual, 'A')} 主料，替代料号不能创建");
+            }
+
+            int groupIdFinal;
+            if (existingGroupId is not null)
+            {
+                groupIdFinal = existingGroupId.Value;
+            }
+            else
+            {
+                if (suffixChar != 'A')
+                    return Result<CreateMaterialResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "group not found.");
+
+                try
+                {
+                    groupIdFinal = await _repo.InsertGroupAsync(categoryCode, serialNoManual, ct);
+                }
+                catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_GROUP_CATEGORY_SERIAL)
+                {
+                    // manual must not retry by changing serial; treat as validation error
+                    return Result<CreateMaterialResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "group already exists.");
+                }
+            }
+
+            // anchor presence for suffix != A
+            if (suffixChar != 'A')
+            {
+                var baseSnap = await _repo.GetBaseItemStatusByGroupIdAsync(groupIdFinal, ct);
+                if (baseSnap is null)
+                    return Result<CreateMaterialResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "group has no anchor item(A); please repair data.");
+            }
+
+            var item = new MaterialItem(
+                code: existingCodeRaw,
+                suffix: new MaterialCodingSystem.Domain.ValueObjects.Suffix(suffixChar),
                 spec: spec,
                 name: categoryName,
                 description: req.Description,
-                brand: req.Brand
+                specNormalized: new SpecNormalized(SpecNormalizer.NormalizeV1(req.Description)),
+                brand: string.IsNullOrWhiteSpace(req.Brand) ? null : req.Brand
             );
 
-            var itemA = group.Items.Single(i => i.Suffix.Value == 'A');
             try
             {
-                await _repo.InsertItemAsync(groupId, itemA, ct);
+                await _repo.InsertItemAsync(groupIdFinal, item, ct);
             }
-            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CATEGORY_SPEC)
+            catch (DbConstraintViolationException ex) when (
+                ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CODE
+                || ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX
+                || ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CATEGORY_SPEC)
             {
-                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.SPEC_DUPLICATE, "spec duplicate.");
-            }
-            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX)
-            {
-                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.INTERNAL_ERROR, "unexpected suffix conflict on create A.");
-            }
-            catch (DbConstraintViolationException ex) when (ex.Constraint == IMaterialRepository.CONSTRAINT_ITEM_CODE)
-            {
-                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.CODE_CONFLICT_RETRY, "code conflict.");
-            }
-            catch (DbConstraintViolationException)
-            {
-                return Result<CreateMaterialItemAResponse>.Fail(ErrorCodes.INTERNAL_ERROR, "constraint violation on insert item.");
+                return Result<CreateMaterialResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "constraint violation.");
             }
 
-            return Result<CreateMaterialItemAResponse>.Ok(new CreateMaterialItemAResponse(
-                GroupId: groupId,
+            var ok2 = new CreateMaterialResponse(
+                GroupId: groupIdFinal,
                 CategoryCode: categoryCode.Value,
-                SerialNo: serialNo,
-                Code: itemA.Code,
-                Suffix: "A",
-                Spec: itemA.Spec.Value,
-                SpecNormalized: itemA.SpecNormalized.Value
-            ));
+                SerialNo: serialNoManual,
+                Code: existingCodeRaw,
+                Suffix: suffixChar.ToString(),
+                Spec: spec.Value,
+                SpecNormalized: item.SpecNormalized.Value
+            );
+
+            if (!string.IsNullOrWhiteSpace(req.RequestId))
+            {
+                try
+                {
+                    await _repo.InsertCreateMaterialSuccessLogAsync(req.RequestId!, ok2, ct);
+                }
+                catch (DbConstraintViolationException)
+                {
+                    var existing = await _repo.GetCreateMaterialSuccessByRequestIdAsync(req.RequestId!, ct);
+                    if (existing is not null)
+                        return Result<CreateMaterialResponse>.Ok(existing);
+                }
+            }
+
+            return Result<CreateMaterialResponse>.Ok(ok2);
         }, ct, retryConstraint: IMaterialRepository.CONSTRAINT_GROUP_CATEGORY_SERIAL);
 
     public Task<Result<CreateReplacementResponse>> CreateReplacement(CreateReplacementRequest req, CancellationToken ct = default)

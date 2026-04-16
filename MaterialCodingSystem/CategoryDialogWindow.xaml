@@ -48,7 +48,13 @@
 
                 <TextBlock Text="分类名称"/>
                 <TextBox Style="{StaticResource ModernTextBox}"
-                         Margin="0,4,0,0" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
+                         Margin="0,4,0,12" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
+
+                <TextBlock Text="自动编码起始值（start_serial_no）"/>
+                <TextBlock Foreground="#6B7280" FontSize="11" Margin="0,4,0,0"
+                           Text="必填，>=1；建议设置为历史编码保护起点。默认 1。"/>
+                <TextBox Style="{StaticResource ModernTextBox}"
+                         Margin="0,4,0,0" Text="{Binding StartSerialNo, UpdateSourceTrigger=PropertyChanged}"/>
 
                 <TextBlock Margin="0,8,0,0" Foreground="Red" TextWrapping="Wrap" Text="{Binding Error}"/>
             </StackPanel>

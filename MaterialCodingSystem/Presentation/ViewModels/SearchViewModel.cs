@@ -87,7 +87,7 @@ public sealed class SearchViewModel : ViewModelBase
         }
 
         // UI: 默认“全部”，允许不选分类也能查
-        Categories.Insert(0, new CategoryDto("*", "全部分类"));
+        Categories.Insert(0, new CategoryDto("*", "全部分类", 1));
         SelectedCategory = Categories.FirstOrDefault();
     }
 

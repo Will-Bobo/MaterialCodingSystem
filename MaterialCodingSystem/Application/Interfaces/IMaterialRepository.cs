@@ -28,17 +28,29 @@ public interface IMaterialRepository
 
     Task<string?> GetCategoryNameByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default);
 
-    Task InsertCategoryAsync(string code, string name, CancellationToken ct = default);
+    Task InsertCategoryAsync(string code, string name, int startSerialNo, CancellationToken ct = default);
 
-    Task<IReadOnlyList<(string Code, string Name)>> ListCategoriesAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<(string Code, string Name, int StartSerialNo)>> ListCategoriesAsync(CancellationToken ct = default);
+
+    Task<int?> GetCategoryIdByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default);
+
+    Task<int> GetCategoryStartSerialNoAsync(int categoryId, CancellationToken ct = default);
 
     Task<bool> SpecExistsAsync(CategoryCode categoryCode, Spec spec, CancellationToken ct = default);
 
     Task<int> GetMaxSerialNoAsync(CategoryCode categoryCode, CancellationToken ct = default);
 
+    Task<int?> GetGroupIdByCategoryIdAndSerialNoAsync(int categoryId, int serialNo, CancellationToken ct = default);
+
     Task<int> InsertGroupAsync(CategoryCode categoryCode, int serialNo, CancellationToken ct = default);
 
     Task InsertItemAsync(int groupId, MaterialItem item, CancellationToken ct = default);
+
+    Task<IReadOnlyList<string>> ListCategoryCodesAsync(CancellationToken ct = default);
+
+    Task<CreateMaterialResponse?> GetCreateMaterialSuccessByRequestIdAsync(string requestId, CancellationToken ct = default);
+
+    Task InsertCreateMaterialSuccessLogAsync(string requestId, CreateMaterialResponse response, CancellationToken ct = default);
 
     Task<MaterialGroupSnapshot?> GetGroupSnapshotAsync(int groupId, CancellationToken ct = default);
 

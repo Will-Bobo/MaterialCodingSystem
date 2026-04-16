@@ -16,6 +16,8 @@ public interface IUiRenderer
 
     bool ConfirmCreateMaterial(CreateMaterialConfirmModel model);
 
+    bool ConfirmWarning(string title, string body);
+
     bool ConfirmCreateReplacement(CreateReplacementConfirmModel model);
 
     Task<bool> ConfirmDeprecateAsync(DeprecateConfirmModel model);
@@ -55,6 +57,11 @@ public sealed class WpfUiRenderer : IUiRenderer
             $"品牌：{model.Brand}";
 
         return _dialogs.Confirm("确认创建主物料", body);
+    }
+
+    public bool ConfirmWarning(string title, string body)
+    {
+        return _dialogs.Confirm(title, body);
     }
 
     public bool ConfirmCreateReplacement(CreateReplacementConfirmModel model)

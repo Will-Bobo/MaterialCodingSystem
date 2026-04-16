@@ -92,14 +92,28 @@ public sealed class SqliteMaterialRepository : IMaterialRepository
             sql, new { code = categoryCode.Value }, transaction: Tx, cancellationToken: ct));
     }
 
-    public async Task InsertCategoryAsync(string code, string name, CancellationToken ct = default)
+    public async Task<int?> GetCategoryIdByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default)
+    {
+        var sql = "SELECT id FROM category WHERE code = @code LIMIT 1;";
+        return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
+            sql, new { code = categoryCode.Value }, transaction: Tx, cancellationToken: ct));
+    }
+
+    public async Task<int> GetCategoryStartSerialNoAsync(int categoryId, CancellationToken ct = default)
+    {
+        var sql = "SELECT start_serial_no FROM category WHERE id=@id LIMIT 1;";
+        return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
+            sql, new { id = categoryId }, transaction: Tx, cancellationToken: ct)) ?? 1;
+    }
+
+    public async Task InsertCategoryAsync(string code, string name, int startSerialNo, CancellationToken ct = default)
     {
         EnsureWriteTransaction();
-        var sql = "INSERT INTO category(code, name) VALUES (@code, @name);";
+        var sql = "INSERT INTO category(code, name, start_serial_no) VALUES (@code, @name, @startSerialNo);";
         try
         {
             await _connection.ExecuteAsync(new CommandDefinition(
-                sql, new { code, name }, transaction: Tx, cancellationToken: ct));
+                sql, new { code, name, startSerialNo }, transaction: Tx, cancellationToken: ct));
         }
         catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
         {
@@ -108,12 +122,20 @@ public sealed class SqliteMaterialRepository : IMaterialRepository
         }
     }
 
-    public async Task<IReadOnlyList<(string Code, string Name)>> ListCategoriesAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<(string Code, string Name, int StartSerialNo)>> ListCategoriesAsync(CancellationToken ct = default)
     {
-        var sql = "SELECT code AS Code, name AS Name FROM category ORDER BY code;";
-        var rows = await _connection.QueryAsync<(string Code, string Name)>(new CommandDefinition(
+        var sql = "SELECT code AS Code, name AS Name, start_serial_no AS StartSerialNo FROM category ORDER BY code;";
+        var rows = await _connection.QueryAsync<(string Code, string Name, int StartSerialNo)>(new CommandDefinition(
             sql, transaction: Tx, cancellationToken: ct));
         return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<string>> ListCategoryCodesAsync(CancellationToken ct = default)
+    {
+        var sql = "SELECT code FROM category ORDER BY LENGTH(code) DESC, code DESC;";
+        var rows = await _connection.QueryAsync<string>(new CommandDefinition(
+            sql, transaction: Tx, cancellationToken: ct));
+        return rows.Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
     }
 
     public async Task<bool> SpecExistsAsync(CategoryCode categoryCode, Spec spec, CancellationToken ct = default)
@@ -129,9 +151,73 @@ public sealed class SqliteMaterialRepository : IMaterialRepository
         var sql = @"
 SELECT MAX(serial_no)
 FROM material_group
-WHERE category_code = @categoryCode;";
+WHERE category_id = (SELECT id FROM category WHERE code=@categoryCode);";
         return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
             sql, new { categoryCode = categoryCode.Value }, transaction: Tx, cancellationToken: ct)) ?? 0;
+    }
+
+    public async Task<int?> GetGroupIdByCategoryIdAndSerialNoAsync(int categoryId, int serialNo, CancellationToken ct = default)
+    {
+        var sql = "SELECT id FROM material_group WHERE category_id=@categoryId AND serial_no=@serialNo LIMIT 1;";
+        return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
+            sql, new { categoryId, serialNo }, transaction: Tx, cancellationToken: ct));
+    }
+
+    public async Task<CreateMaterialResponse?> GetCreateMaterialSuccessByRequestIdAsync(string requestId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(requestId))
+            return null;
+
+        var sql = """
+                  SELECT
+                    group_id AS GroupId,
+                    category_code AS CategoryCode,
+                    serial_no AS SerialNo,
+                    code AS Code,
+                    suffix AS Suffix,
+                    spec AS Spec,
+                    spec_normalized AS SpecNormalized
+                  FROM create_request_log
+                  WHERE request_id=@requestId AND op='CreateMaterial'
+                  LIMIT 1;
+                  """;
+        return await _connection.QuerySingleOrDefaultAsync<CreateMaterialResponse>(new CommandDefinition(
+            sql, new { requestId = requestId.Trim() }, transaction: Tx, cancellationToken: ct));
+    }
+
+    public async Task InsertCreateMaterialSuccessLogAsync(string requestId, CreateMaterialResponse response, CancellationToken ct = default)
+    {
+        EnsureWriteTransaction();
+        var sql = """
+                  INSERT INTO create_request_log(
+                    request_id, op, group_id, category_code, serial_no, code, suffix, spec, spec_normalized
+                  ) VALUES (
+                    @requestId, 'CreateMaterial', @groupId, @categoryCode, @serialNo, @code, @suffix, @spec, @specNormalized
+                  );
+                  """;
+        try
+        {
+            await _connection.ExecuteAsync(new CommandDefinition(
+                sql,
+                new
+                {
+                    requestId = requestId.Trim(),
+                    groupId = response.GroupId,
+                    categoryCode = response.CategoryCode,
+                    serialNo = response.SerialNo,
+                    code = response.Code,
+                    suffix = response.Suffix,
+                    spec = response.Spec,
+                    specNormalized = response.SpecNormalized
+                },
+                transaction: Tx,
+                cancellationToken: ct
+            ));
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+        {
+            throw new DbConstraintViolationException("UNIQUE(create_request_log.request_id)", ex.Message);
+        }
     }
 
     public async Task<int> InsertGroupAsync(CategoryCode categoryCode, int serialNo, CancellationToken ct = default)
