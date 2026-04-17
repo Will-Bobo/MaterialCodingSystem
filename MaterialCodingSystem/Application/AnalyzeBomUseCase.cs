@@ -119,6 +119,23 @@ public sealed class AnalyzeBomUseCase
 
                 if (codeSnap is not null)
                 {
+                    // 需求：已废弃物料（status=0）在 BOM 审核中视为异常（优先级最高）
+                    if (codeSnap.Status != 1)
+                    {
+                        error++;
+                        firstErrorRowNo ??= r.ExcelRowNo;
+                        outRows.Add(new BomAuditRowDto(
+                            r.ExcelRowNo,
+                            BomAuditStatus.ERROR,
+                            codeRaw,
+                            r.Name ?? "",
+                            specRaw,
+                            r.Description ?? "",
+                            r.Brand ?? "",
+                            "物料已废弃，禁止使用"));
+                        continue;
+                    }
+
                     // PASS / ERROR(B/C)
                     if (string.Equals(codeSnap.Spec, spec.Value, StringComparison.Ordinal))
                     {

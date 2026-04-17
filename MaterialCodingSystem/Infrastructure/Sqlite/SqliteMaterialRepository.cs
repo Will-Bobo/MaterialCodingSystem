@@ -275,11 +275,11 @@ WHERE mg.id = @groupId;";
 
     public async Task<MaterialItemCodeSpecSnapshot?> GetCodeSpecByCodeAsync(string code, CancellationToken ct = default)
     {
-        var sql = "SELECT code AS Code, spec AS Spec FROM material_item WHERE code=@code LIMIT 1;";
+        var sql = "SELECT code AS Code, spec AS Spec, status AS Status FROM material_item WHERE code=@code LIMIT 1;";
         var row = await _connection.QuerySingleOrDefaultAsync<dynamic>(new CommandDefinition(
             sql, new { code }, transaction: Tx, cancellationToken: ct));
         if (row is null) return null;
-        return new MaterialItemCodeSpecSnapshot((string)row.Code, (string)row.Spec);
+        return new MaterialItemCodeSpecSnapshot((string)row.Code, (string)row.Spec, (int)row.Status);
     }
 
     public async Task<int?> GetGroupIdByItemCodeAsync(string code, CancellationToken ct = default)

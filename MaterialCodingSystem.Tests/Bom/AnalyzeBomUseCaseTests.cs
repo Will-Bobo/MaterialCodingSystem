@@ -125,6 +125,66 @@ VALUES (1,1,'ZDA','ZDA0000001A','A','R','d1','S-PASS','D1',NULL,1);
     }
 
     [Fact]
+    public async Task Analyze_When_Code_Deprecated_Should_Be_ERROR_And_Reason_Deprecated_First()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        var conn = db.Connection;
+        await conn.ExecuteAsync("INSERT INTO category(code,name) VALUES ('ZDA','R');");
+        await conn.ExecuteAsync("INSERT INTO material_group(id,category_id,category_code,serial_no) VALUES (1,1,'ZDA',1);");
+        await conn.ExecuteAsync(@"
+INSERT INTO material_item(group_id,category_id,category_code,code,suffix,name,description,spec,spec_normalized,brand,status)
+VALUES (1,1,'ZDA','ZDA0000001A','A','R','d1','S-PASS','D1',NULL,0);
+");
+
+        var repo = new SqliteMaterialRepository(conn);
+        var uow = new SqliteUnitOfWork(conn);
+        var gridParser = new UnifiedBomGridParser(
+            NullLogger<UnifiedBomGridParser>.Instance,
+            new MaterialCodingSystem.Infrastructure.Excel.Adapters.ClosedXmlBomGridAdapter(),
+            new MaterialCodingSystem.Infrastructure.Excel.Adapters.ExcelDataReaderBomGridAdapter());
+        var parseBom = new ParseBomUseCase(gridParser);
+        var detector = new MaterialCodingSystem.Infrastructure.Excel.BomFileFormatDetector();
+        var useCase = new AnalyzeBomUseCase(parseBom, detector, repo, uow, NullLogger<AnalyzeBomUseCase>.Instance);
+
+        var path = WriteBomTempFile(wb =>
+        {
+            var ws = wb.AddWorksheet("BOM");
+            ws.Cell(1, 1).Value = "成品编码";
+            ws.Cell(1, 2).Value = "CP";
+            ws.Cell(2, 1).Value = "PCBA版本号";
+            ws.Cell(2, 2).Value = "V";
+
+            ws.Cell(5, 1).Value = "编码";
+            ws.Cell(5, 2).Value = "名称";
+            ws.Cell(5, 3).Value = "描述";
+            ws.Cell(5, 4).Value = "规格";
+            ws.Cell(5, 5).Value = "品牌";
+
+            ws.Cell(6, 1).Value = "ZDA0000001A";
+            ws.Cell(6, 2).Value = "n1";
+            ws.Cell(6, 3).Value = "d1";
+            ws.Cell(6, 4).Value = "S-PASS";
+            ws.Cell(6, 5).Value = "";
+        });
+
+        try
+        {
+            var res = await useCase.ExecuteAsync(new AnalyzeBomRequest(path));
+            Assert.True(res.IsSuccess, res.Error?.Message);
+            Assert.Single(res.Data!.Rows);
+            Assert.Equal(BomAuditStatus.ERROR, res.Data.Rows[0].Status);
+            Assert.Equal("物料已废弃，禁止使用", res.Data.Rows[0].ErrorReason);
+            Assert.Equal(0, res.Data.PassCount);
+            Assert.Equal(1, res.Data.ErrorCount);
+            Assert.Equal(6, res.Data.FirstErrorRowNo);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task Analyze_When_Code_NotExists_And_Spec_Exists_Only_Deprecated_Should_Be_NEW()
     {
         await using var db = await SqliteTestDb.CreateAsync();

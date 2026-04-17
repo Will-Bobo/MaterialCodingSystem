@@ -176,7 +176,7 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
     public Task<MaterialItemCodeSpecSnapshot?> GetCodeSpecByCodeAsync(string code, CancellationToken ct = default)
     {
         if (!ItemExistsByCode) return Task.FromResult<MaterialItemCodeSpecSnapshot?>(null);
-        return Task.FromResult<MaterialItemCodeSpecSnapshot?>(new MaterialItemCodeSpecSnapshot(code, ItemSpecByCode));
+        return Task.FromResult<MaterialItemCodeSpecSnapshot?>(new MaterialItemCodeSpecSnapshot(code, ItemSpecByCode, ItemStatusByCode));
     }
 
     public Task<int?> GetGroupIdByItemCodeAsync(string code, CancellationToken ct = default)

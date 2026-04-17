@@ -13,7 +13,7 @@ public sealed record MaterialGroupSnapshot(
 
 public sealed record MaterialItemStatusSnapshot(string Code, int Status);
 
-public sealed record MaterialItemCodeSpecSnapshot(string Code, string Spec);
+public sealed record MaterialItemCodeSpecSnapshot(string Code, string Spec, int Status);
 
 public interface IMaterialRepository
 {
