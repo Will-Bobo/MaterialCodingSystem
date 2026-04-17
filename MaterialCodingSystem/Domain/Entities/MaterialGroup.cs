@@ -36,6 +36,7 @@ public sealed class MaterialGroup
             suffix: new Suffix('A'),
             spec: spec,
             name: name,
+            displayName: null,
             description: description,
             specNormalized: normalized,
             brand: brand
@@ -55,6 +56,7 @@ public sealed class MaterialGroup
             suffix: new Suffix(next),
             spec: spec,
             name: name,
+            displayName: null,
             description: description,
             specNormalized: normalized,
             brand: brand

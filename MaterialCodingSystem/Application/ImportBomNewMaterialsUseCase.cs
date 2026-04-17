@@ -79,6 +79,7 @@ public sealed class ImportBomNewMaterialsUseCase
                 Code: row.Code,
                 Spec: row.Spec,
                 Name: row.Name,
+                DisplayName: row.Name,
                 Description: row.Description,
                 Brand: row.Brand
             ), ct);

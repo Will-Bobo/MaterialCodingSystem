@@ -27,6 +27,7 @@ public class CreateMaterialItemManualTests
             Code: code,
             Spec: "S1",
             Name: "ignored",
+            DisplayName: null,
             Description: " 10uF  16V 0603 ",
             Brand: "B"
         ));
@@ -50,6 +51,7 @@ public class CreateMaterialItemManualTests
             Code: "ELC0000000A",
             Spec: "S1",
             Name: "n",
+            DisplayName: null,
             Description: "d",
             Brand: "b"
         ));
@@ -68,6 +70,7 @@ public class CreateMaterialItemManualTests
             Code: "ZDA0000123A",
             Spec: "S1",
             Name: "n",
+            DisplayName: null,
             Description: "d",
             Brand: "b"
         ));
@@ -95,6 +98,7 @@ public class CreateMaterialItemManualTests
             Code: "ELC0000123A",
             Spec: "S1",
             Name: "n",
+            DisplayName: null,
             Description: "d",
             Brand: "b"
         ));
@@ -122,6 +126,7 @@ public class CreateMaterialItemManualTests
             Code: "ELC0000123B",
             Spec: "S1",
             Name: "n",
+            DisplayName: null,
             Description: "d",
             Brand: "b"
         ));
@@ -152,6 +157,7 @@ public class CreateMaterialItemManualTests
             Code: "ELC0000123A",
             Spec: "S1",
             Name: "n",
+            DisplayName: null,
             Description: "d",
             Brand: "b"
         ));
@@ -177,6 +183,7 @@ public class CreateMaterialItemManualTests
             Code: "ELC0000123A",
             Spec: "S1",
             Name: "n",
+            DisplayName: null,
             Description: "d",
             Brand: "b"
         ));

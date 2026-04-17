@@ -181,14 +181,14 @@ SELECT last_insert_rowid();";
         var sql = @"
 INSERT INTO material_item(
   group_id, category_id, category_code,
-  code, suffix, name, description, spec, spec_normalized, brand,
+  code, suffix, name, display_name, description, spec, spec_normalized, brand,
   status, is_structured
 )
 SELECT
   @groupId,
   mg.category_id,
   mg.category_code,
-  @code, @suffix, @name, @description, @spec, @specNormalized, @brand,
+  @code, @suffix, @name, @displayName, @description, @spec, @specNormalized, @brand,
   1, 0
 FROM material_group mg
 WHERE mg.id = @groupId;
@@ -204,6 +204,7 @@ WHERE mg.id = @groupId;
                     code = item.Code,
                     suffix = item.Suffix.Value.ToString(),
                     name = item.Name,
+                    displayName = item.DisplayName,
                     description = item.Description,
                     spec = item.Spec.Value,
                     specNormalized = item.SpecNormalized.Value,
@@ -315,7 +316,7 @@ WHERE mg.id = @groupId;";
         async Task<List<MaterialItemSummary>> QueryAsync(string pattern)
         {
             var sql = $@"
-SELECT code AS Code, name AS Name, spec AS Spec, description AS Description, brand AS Brand, status AS Status
+SELECT code AS Code, name AS Name, display_name AS DisplayName, spec AS Spec, description AS Description, brand AS Brand, status AS Status
 FROM material_item
 WHERE code LIKE @pattern
   {statusFilter}
@@ -345,7 +346,7 @@ LIMIT @limit OFFSET @offset;";
     public async Task<PagedResult<MaterialItemSpecHit>> SearchBySpecAsync(SearchQuery query, CancellationToken ct = default)
     {
         var sql = @"
-SELECT code AS Code, spec AS Spec, description AS Description, name AS Name, brand AS Brand, status AS Status, group_id AS GroupId
+SELECT code AS Code, spec AS Spec, description AS Description, name AS Name, display_name AS DisplayName, brand AS Brand, status AS Status, group_id AS GroupId
 FROM material_item
 WHERE category_code = @categoryCode
   AND status = 1
@@ -378,6 +379,7 @@ SELECT
   mi.spec AS Spec,
   mi.description AS Description,
   mi.name AS Name,
+  mi.display_name AS DisplayName,
   mi.brand AS Brand,
   mi.status AS Status,
   mi.group_id AS GroupId
@@ -416,6 +418,7 @@ SELECT
   mi.spec AS Spec,
   mi.description AS Description,
   mi.name AS Name,
+  mi.display_name AS DisplayName,
   mi.brand AS Brand,
   mi.status AS Status,
   mi.group_id AS GroupId
@@ -457,10 +460,12 @@ SELECT
   mi.description AS Description,
   mi.brand AS Brand,
   mg.category_code AS CategoryCode,
+  c.name AS CategoryName,
   mg.serial_no AS SerialNo,
   mi.suffix AS Suffix,
   mi.status AS Status,
-  c.name AS Name
+  mi.name AS Name,
+  mi.display_name AS DisplayName
 FROM material_item mi
 JOIN material_group mg ON mi.group_id = mg.id
 JOIN category c ON mg.category_id = c.id
@@ -481,10 +486,12 @@ SELECT
   mi.description AS Description,
   mi.brand AS Brand,
   mg.category_code AS CategoryCode,
+  c.name AS CategoryName,
   mg.serial_no AS SerialNo,
   mi.suffix AS Suffix,
   mi.status AS Status,
-  c.name AS Name
+  mi.name AS Name,
+  mi.display_name AS DisplayName
 FROM material_item mi
 JOIN material_group mg ON mi.group_id = mg.id
 JOIN category c ON mg.category_id = c.id

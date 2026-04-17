@@ -13,6 +13,7 @@ public sealed record CreateMaterialItemManualRequest(
     string Code,
     string Spec,
     string Name,
+    string? DisplayName,
     string Description,
     string? Brand
 );

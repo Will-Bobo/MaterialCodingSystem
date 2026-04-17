@@ -42,6 +42,7 @@ public static class SqliteSchema
                        code TEXT NOT NULL UNIQUE,
                        suffix TEXT NOT NULL,
                        name TEXT NOT NULL,
+                       display_name TEXT NULL,
                        description TEXT NOT NULL,
                        spec TEXT NOT NULL,
                        spec_normalized TEXT NOT NULL,
@@ -60,6 +61,9 @@ public static class SqliteSchema
         // 2) 如未完成迁移，则把表级 UNIQUE(category_code, spec) 迁移为部分唯一索引：
         //    CREATE UNIQUE INDEX ... WHERE status=1
         EnsureSpecUniqueActiveOnlyMigrated(conn, tx);
+
+        // 2.1) V1.4.1：display_name 列（BOM 显示名）增量迁移（旧 DB 无该列时自动补齐）
+        EnsureMaterialItemDisplayNameColumnMigrated(conn, tx);
 
         // 3) 其他表与索引
         conn.Execute("""
@@ -142,6 +146,7 @@ public static class SqliteSchema
                        code TEXT NOT NULL UNIQUE,
                        suffix TEXT NOT NULL,
                        name TEXT NOT NULL,
+                       display_name TEXT NULL,
                        description TEXT NOT NULL,
                        spec TEXT NOT NULL,
                        spec_normalized TEXT NOT NULL,
@@ -159,12 +164,12 @@ public static class SqliteSchema
         conn.Execute("""
                      INSERT INTO material_item(
                        id, group_id, category_id, category_code,
-                       code, suffix, name, description, spec, spec_normalized, brand,
+                       code, suffix, name, display_name, description, spec, spec_normalized, brand,
                        status, is_structured, created_at
                      )
                      SELECT
                        id, group_id, category_id, category_code,
-                       code, suffix, name, description, spec, spec_normalized, brand,
+                       code, suffix, name, NULL, description, spec, spec_normalized, brand,
                        status, is_structured, created_at
                      FROM material_item_old;
                      """, transaction: tx);
@@ -189,6 +194,29 @@ public static class SqliteSchema
 
         conn.Execute("DROP TABLE material_item_old;", transaction: tx);
         conn.Execute("PRAGMA foreign_keys=ON;", transaction: tx);
+    }
+
+    private static void EnsureMaterialItemDisplayNameColumnMigrated(SqliteConnection conn, SqliteTransaction tx)
+    {
+        // 幂等：通过 PRAGMA table_info 判断列是否存在
+        var has = conn.ExecuteScalar<long>(
+            """
+            SELECT COUNT(1)
+            FROM pragma_table_info('material_item')
+            WHERE name = 'display_name';
+            """,
+            transaction: tx);
+        if (has > 0) return;
+
+        try
+        {
+            conn.Execute("ALTER TABLE material_item ADD COLUMN display_name TEXT NULL;", transaction: tx);
+        }
+        catch (Exception ex)
+        {
+            // 启动升级失败需要可追踪（轻量：抛出让上层捕获/记录）
+            throw new InvalidOperationException("failed to migrate material_item.display_name", ex);
+        }
     }
 }
 

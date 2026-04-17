@@ -348,6 +348,7 @@ public sealed class MaterialApplicationService
                 suffix: parsed.Suffix,
                 spec: spec,
                 name: categoryName,
+                displayName: req.DisplayName,
                 description: req.Description,
                 specNormalized: normalized,
                 brand: req.Brand
@@ -474,6 +475,7 @@ public sealed class MaterialApplicationService
                     suffix: new Domain.ValueObjects.Suffix(s),
                     spec: new Spec("DUMMY-" + s),
                     name: "DUMMY",
+                    displayName: null,
                     description: "DUMMY",
                     specNormalized: new Domain.ValueObjects.SpecNormalized(SpecNormalizer.NormalizeV1("DUMMY")),
                     brand: null
@@ -487,6 +489,7 @@ public sealed class MaterialApplicationService
                 suffix: item.Suffix,
                 spec: item.Spec,
                 name: categoryName,
+                displayName: null,
                 description: item.Description,
                 specNormalized: item.SpecNormalized,
                 brand: item.Brand
@@ -632,6 +635,7 @@ public sealed class MaterialApplicationService
                     suffix: new Domain.ValueObjects.Suffix(s),
                     spec: new Spec("DUMMY-" + s),
                     name: "DUMMY",
+                    displayName: null,
                     description: "DUMMY",
                     specNormalized: new Domain.ValueObjects.SpecNormalized(SpecNormalizer.NormalizeV1("DUMMY")),
                     brand: null

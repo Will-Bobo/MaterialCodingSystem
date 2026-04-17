@@ -78,7 +78,7 @@ public sealed class CreateMaterialViewModelTests
     public async Task When_spec_field_active_uses_spec_as_search_keyword()
     {
         var repo = new FakeMaterialRepository();
-        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "PART", "DESC", "N", null, 1, 1));
+        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "PART", "DESC", "N", null, null, 1, 1));
         var vm = CreateVm(repo);
 
         await Task.Delay(150);
@@ -97,7 +97,7 @@ public sealed class CreateMaterialViewModelTests
     {
         var repo = new FakeMaterialRepository();
         repo.CategoryRows.Add(("ZDB", "电容"));
-        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "P", "10UF 16V", "N", null, 1, 1));
+        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "P", "10UF 16V", "N", null, null, 1, 1));
         var vm = CreateVm(repo);
 
         await Task.Delay(150);
@@ -167,7 +167,7 @@ public sealed class CreateMaterialViewModelTests
     {
         var repo = new FakeMaterialRepository();
         // similar candidates exist but not exact
-        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "S1X", "D", "N", null, 1, 1));
+        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "S1X", "D", "N", null, null, 1, 1));
         var vm = CreateVm(repo);
 
         await Task.Delay(150);
@@ -186,7 +186,7 @@ public sealed class CreateMaterialViewModelTests
     public async Task UiState_WhenExactSpecMatch_IsCandidateConflict()
     {
         var repo = new FakeMaterialRepository();
-        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "S1", "D", "N", null, 1, 1));
+        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "S1", "D", "N", null, null, 1, 1));
         var vm = CreateVm(repo);
 
         await Task.Delay(150);
@@ -205,7 +205,7 @@ public sealed class CreateMaterialViewModelTests
     public async Task UiState_WhenHasCandidatesAndNoExactAndDescriptionPresent_IsCandidateNone_ThenReadyAfterForceAllowed()
     {
         var repo = new FakeMaterialRepository();
-        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "S1X", "D", "N", null, 1, 1));
+        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "S1X", "D", "N", null, null, 1, 1));
         var vm = CreateVm(repo);
 
         await Task.Delay(150);
@@ -228,7 +228,7 @@ public sealed class CreateMaterialViewModelTests
     public async Task AllowedKey_WhenSpecChanges_AutoInvalidates_AndRequiresAllowAgain()
     {
         var repo = new FakeMaterialRepository();
-        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "12340", "D", "N", null, 1, 1));
+        repo.SpecSearchHits.Add(new MaterialItemSpecHit("ZDA0000001A", "12340", "D", "N", null, null, 1, 1));
         var vm = CreateVm(repo);
 
         await Task.Delay(150);

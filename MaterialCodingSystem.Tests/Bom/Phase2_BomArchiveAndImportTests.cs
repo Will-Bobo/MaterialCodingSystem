@@ -64,6 +64,11 @@ public sealed class Phase2_BomArchiveAndImportTests
             Assert.True(after.IsSuccess, after.Error?.Message);
             Assert.Equal(1, after.Data!.AnalyzeResult.PassCount);
             Assert.Equal(0, after.Data.AnalyzeResult.NewCount);
+
+            var row = await conn.QuerySingleAsync<dynamic>(
+                "SELECT name, display_name FROM material_item WHERE code='ZDA0000009A' LIMIT 1;");
+            Assert.Equal("R", (string)row.name);               // name = 分类名称快照（旧语义不变）
+            Assert.Equal("n9", (string)row.display_name);      // display_name = BOM 名称
         }
         finally
         {

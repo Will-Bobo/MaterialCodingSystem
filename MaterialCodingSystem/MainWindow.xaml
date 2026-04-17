@@ -697,7 +697,7 @@
                                   ScrollViewer.VerticalScrollBarVisibility="Auto">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="物料编码" Binding="{Binding Code}" Width="220"/>
-                                    <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="60"/>
+                                    <DataGridTextColumn Header="名称" Binding="{Binding DisplayNameForUi}" Width="60"/>
                                     <DataGridTextColumn Header="规格描述" Binding="{Binding Description}" Width="*" MinWidth="160"/>
                                     <DataGridTextColumn Header="规格" Binding="{Binding Spec}" Width="160"/>
                                     <DataGridTextColumn Header="品牌" Binding="{Binding Brand}" Width="80"/>
@@ -748,7 +748,7 @@
                     <DataGrid Grid.Row="3" Margin="0,8,0,0" ItemsSource="{Binding Search.CodeResults}" AutoGenerateColumns="False" IsReadOnly="True">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="编码" Binding="{Binding Code}" Width="200"/>
-                            <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="150"/>
+                            <DataGridTextColumn Header="名称" Binding="{Binding DisplayNameForUi}" Width="150"/>
                             <DataGridTextColumn Header="规格号" Binding="{Binding Spec}" Width="*"/>
                             <DataGridTextColumn Header="品牌" Binding="{Binding Brand}" Width="120"/>
                             <DataGridTextColumn Header="状态" Width="80"
@@ -821,7 +821,7 @@
                             <DataGridTextColumn Header="编码" Binding="{Binding Code}" Width="200"/>
                             <DataGridTextColumn Header="规格号" Binding="{Binding Spec}" Width="260"/>
                             <DataGridTextColumn Header="规格描述" Binding="{Binding Description}" Width="*"/>
-                            <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="140"/>
+                            <DataGridTextColumn Header="名称" Binding="{Binding DisplayNameForUi}" Width="140"/>
                             <DataGridTextColumn Header="品牌" Binding="{Binding Brand}" Width="120"/>
                             <DataGridTextColumn Header="状态" Width="80"
                                                 Binding="{Binding Status, Converter={StaticResource StatusToText}}">

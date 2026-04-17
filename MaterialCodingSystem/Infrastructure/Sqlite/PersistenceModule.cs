@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics;
 
 namespace MaterialCodingSystem.Infrastructure.Sqlite;
 
@@ -15,7 +16,15 @@ public static class PersistenceModule
             // Pooling must be disabled to ensure Restore can release file handles deterministically.
             var conn = new SqliteConnection($"Data Source={dbPath};Pooling=False");
             conn.Open();
-            SqliteSchema.EnsureCreated(conn);
+            try
+            {
+                SqliteSchema.EnsureCreated(conn);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MCS][DB] EnsureCreated failed: {ex}");
+                throw;
+            }
             return conn;
         });
 

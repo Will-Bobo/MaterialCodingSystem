@@ -94,6 +94,7 @@ public class SpecUniqueActiveOnlyMigrationIntegrationTests
             Code: "ELC0000123B",
             Spec: "S1",
             Name: "ignored",
+            DisplayName: null,
             Description: "d2",
             Brand: null
         ));

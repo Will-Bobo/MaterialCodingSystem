@@ -19,11 +19,11 @@ public sealed class MaterialExportIntegrationTests
         await conn.ExecuteAsync(
             "INSERT INTO material_group(id,category_id,category_code,serial_no) VALUES (1,1,'ZDA',1),(2,2,'ZDB',1);");
         await conn.ExecuteAsync(@"
-INSERT INTO material_item(group_id,category_id,category_code,code,suffix,name,description,spec,spec_normalized,brand,status)
+INSERT INTO material_item(group_id,category_id,category_code,code,suffix,name,display_name,description,spec,spec_normalized,brand,status)
 VALUES
- (1,1,'ZDA','ZDA0000001A','A','n1','d1','S1','D1',NULL,1),
- (1,1,'ZDA','ZDA0000001B','B','n2','d2','S2','D2',NULL,0),
- (2,2,'ZDB','ZDB0000001A','A','n3','d3','S3','D3','B3',1);
+ (1,1,'ZDA','ZDA0000001A','A','R',NULL,'d1','S1','D1',NULL,1),
+ (1,1,'ZDA','ZDA0000001B','B','R','MOS管','d2','S2','D2',NULL,0),
+ (2,2,'ZDB','ZDB0000001A','A','C',NULL,'d3','S3','D3','B3',1);
 ");
 
         var repo = new SqliteMaterialRepository(conn);
@@ -33,12 +33,17 @@ VALUES
         // status DESC, category_code, serial_no, suffix, code
         Assert.Equal("ZDA0000001A", rows[0].Code);
         Assert.Equal(1, rows[0].Status);
-        Assert.Equal("R", rows[0].Name); // name must come from category.name
+        Assert.Equal("R", rows[0].Name); // display_name 为空：回退 name（分类名快照）
+        Assert.Equal("R", rows[0].CategoryName);
         Assert.Equal("ZDB0000001A", rows[1].Code);
         Assert.Equal(1, rows[1].Status);
         Assert.Equal("C", rows[1].Name);
+        Assert.Equal("C", rows[1].CategoryName);
         Assert.Equal("ZDA0000001B", rows[2].Code);
         Assert.Equal(0, rows[2].Status);
+        Assert.Equal("R", rows[2].Name);
+        Assert.Equal("MOS管", rows[2].DisplayNameForUi); // display_name 优先
+        Assert.Equal("R", rows[2].CategoryName);
     }
 
     [Fact]
@@ -51,11 +56,11 @@ VALUES
         await conn.ExecuteAsync(
             "INSERT INTO material_group(id,category_id,category_code,serial_no) VALUES (1,1,'ZDA',1),(2,2,'ZDB',1);");
         await conn.ExecuteAsync(@"
-INSERT INTO material_item(group_id,category_id,category_code,code,suffix,name,description,spec,spec_normalized,brand,status)
+INSERT INTO material_item(group_id,category_id,category_code,code,suffix,name,display_name,description,spec,spec_normalized,brand,status)
 VALUES
- (1,1,'ZDA','ZDA0000001A','A','n1','d1','S1','D1',NULL,1),
- (1,1,'ZDA','ZDA0000001B','B','n2','d2','S2','D2',NULL,0),
- (2,2,'ZDB','ZDB0000001A','A','n3','d3','S3','D3','B3',1);
+ (1,1,'ZDA','ZDA0000001A','A','R',NULL,'d1','S1','D1',NULL,1),
+ (1,1,'ZDA','ZDA0000001B','B','R','MOS管','d2','S2','D2',NULL,0),
+ (2,2,'ZDB','ZDB0000001A','A','C',NULL,'d3','S3','D3','B3',1);
 ");
 
         var repo = new SqliteMaterialRepository(conn);
@@ -80,7 +85,7 @@ VALUES
             Assert.Equal("宋体", zda.Cell(2, 1).Style.Font.FontName);
             // columns: code, name, description, spec, brand, status
             Assert.Equal("ZDA0000001A", zda.Cell(2, 1).GetString());
-            Assert.Equal("R", zda.Cell(2, 2).GetString()); // name from category
+            Assert.Equal("R", zda.Cell(2, 2).GetString()); // display_name 为空：回退 name（分类名快照）
             Assert.Equal("d1", zda.Cell(2, 3).GetString());
             Assert.Equal("S1", zda.Cell(2, 4).GetString());
             Assert.Equal("", zda.Cell(2, 5).GetString());

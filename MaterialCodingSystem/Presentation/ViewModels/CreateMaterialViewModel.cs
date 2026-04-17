@@ -712,6 +712,7 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             Code: Code,
             Spec: Spec,
             Name: Name,
+            DisplayName: null,
             Description: Description,
             Brand: string.IsNullOrWhiteSpace(Brand) ? null : Brand
         ));

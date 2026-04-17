@@ -172,5 +172,33 @@ VALUES
 
         Assert.Equal("CL10A106", r.Data.Items[0].Spec);
     }
+
+    [Fact]
+    public async Task SearchByCode_WhenDisplayNameExists_ShouldPreferDisplayNameForUi()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        var conn = db.Connection;
+        await conn.ExecuteAsync("INSERT INTO category(code,name) VALUES ('ZDF','IC');");
+        await conn.ExecuteAsync("INSERT INTO material_group(id,category_id,category_code,serial_no) VALUES (1,1,'ZDF',1);");
+        await conn.ExecuteAsync(@"
+INSERT INTO material_item(group_id,category_id,category_code,code,suffix,name,display_name,description,spec,spec_normalized,brand,status)
+VALUES (1,1,'ZDF','ZDF0000001A','A','IC','MOS管','d','S1','S1',NULL,1);
+");
+
+        var app = new MaterialApplicationService(new SqliteUnitOfWork(conn), new SqliteMaterialRepository(conn));
+        var search = await app.SearchByCode(new SearchQuery(
+            CodeKeyword: "ZDF0000001A",
+            SpecKeyword: null,
+            CategoryCode: null,
+            IncludeDeprecated: true,
+            Limit: 20,
+            Offset: 0
+        ));
+
+        Assert.True(search.IsSuccess);
+        Assert.Single(search.Data!.Items);
+        Assert.Equal("IC", search.Data.Items[0].Name);
+        Assert.Equal("MOS管", search.Data.Items[0].DisplayNameForUi);
+    }
 }
 

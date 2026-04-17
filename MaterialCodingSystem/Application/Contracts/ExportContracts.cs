@@ -7,10 +7,15 @@ public sealed record MaterialExportRow(
     string Description,
     string? Brand,
     string CategoryCode,
+    string CategoryName,
     long SerialNo,
     string Suffix,
     long Status,
-    string Name
-);
+    string Name,
+    string? DisplayName
+)
+{
+    public string DisplayNameForUi => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName!;
+}
 
 public sealed record ExportMaterialsResponse(string FilePath, int RowCount, int SheetCount);

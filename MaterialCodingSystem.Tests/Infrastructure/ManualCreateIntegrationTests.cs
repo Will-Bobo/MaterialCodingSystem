@@ -23,6 +23,7 @@ public class ManualCreateIntegrationTests
             Code: "ELC0000123B",
             Spec: "S-B",
             Name: "ignored",
+            DisplayName: null,
             Description: "d1",
             Brand: "b"
         ));
@@ -33,6 +34,7 @@ public class ManualCreateIntegrationTests
             Code: "ELC0000123A",
             Spec: "S-A",
             Name: "ignored",
+            DisplayName: null,
             Description: "d2",
             Brand: "b"
         ));
@@ -59,6 +61,7 @@ public class ManualCreateIntegrationTests
             Code: "ELC0000123A",
             Spec: "S-A-1",
             Name: "ignored",
+            DisplayName: null,
             Description: "d1",
             Brand: "b"
         ));
@@ -69,6 +72,7 @@ public class ManualCreateIntegrationTests
             Code: "ELC0000123A",
             Spec: "S-A-2",
             Name: "ignored",
+            DisplayName: null,
             Description: "d2",
             Brand: "b"
         ));

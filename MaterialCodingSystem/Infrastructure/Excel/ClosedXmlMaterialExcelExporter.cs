@@ -24,7 +24,7 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
         // 分类 Sheet：每个分类一个 Sheet（含废弃）
         foreach (var group in rows.GroupBy(r => r.CategoryCode).OrderBy(g => g.Key, StringComparer.Ordinal))
         {
-            var categoryName = group.FirstOrDefault()?.Name ?? "";
+            var categoryName = group.FirstOrDefault()?.CategoryName ?? "";
             var sheetName = SanitizeSheetName($"{categoryName}（{group.Key}）");
             var ws = wb.Worksheets.Add(sheetName);
             WriteHeader(ws);
@@ -72,7 +72,7 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
             ws.Row(row).Height = RowHeight;
             var statusText = item.Status == 1 ? "正常" : "已废弃";
             ws.Cell(row, 1).Value = item.Code;
-            ws.Cell(row, 2).Value = item.Name;
+            ws.Cell(row, 2).Value = item.DisplayNameForUi;
             ws.Cell(row, 3).Value = item.Description;
             ws.Cell(row, 4).Value = item.Spec;
             ws.Cell(row, 5).Value = item.Brand ?? "";

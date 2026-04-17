@@ -47,6 +47,7 @@ public class EntitiesTests
             suffix: new Suffix('C'),
             spec: new Spec("S3"),
             name: "n3",
+            displayName: null,
             description: "d3",
             specNormalized: new SpecNormalized(SpecNormalizer.NormalizeV1("d3")),
             brand: "b3"

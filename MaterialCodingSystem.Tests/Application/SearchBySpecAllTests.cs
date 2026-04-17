@@ -50,6 +50,7 @@ public sealed class SearchBySpecAllTests
                 Spec: "UF",
                 Description: "D",
                 Name: "N",
+                DisplayName: null,
                 Brand: null,
                 Status: 1,
                 GroupId: i));
@@ -66,8 +67,8 @@ public sealed class SearchBySpecAllTests
     public async Task SearchBySpecAll_OrderIsStable()
     {
         var repo = new FakeMaterialRepository();
-        repo.SpecSearchHits.Add(new MaterialItemSpecHit("C2", "UF", "D", "N", null, 1, 1));
-        repo.SpecSearchHits.Add(new MaterialItemSpecHit("C1", "UF", "D", "N", null, 1, 2));
+        repo.SpecSearchHits.Add(new MaterialItemSpecHit("C2", "UF", "D", "N", null, null, 1, 1));
+        repo.SpecSearchHits.Add(new MaterialItemSpecHit("C1", "UF", "D", "N", null, null, 1, 2));
         var app = new MaterialApplicationService(new NoopUnitOfWork(), repo);
 
         var r1 = await app.SearchBySpecAllAsync("UF", includeDeprecated: false, limit: 20);

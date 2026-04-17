@@ -8,6 +8,7 @@ public sealed class MaterialItem
     public Suffix Suffix { get; }
     public Spec Spec { get; }
     public string Name { get; }
+    public string? DisplayName { get; }
     public string Description { get; }
     public SpecNormalized SpecNormalized { get; }
     public string? Brand { get; }
@@ -17,6 +18,7 @@ public sealed class MaterialItem
         Suffix suffix,
         Spec spec,
         string name,
+        string? displayName,
         string description,
         SpecNormalized specNormalized,
         string? brand
@@ -26,6 +28,7 @@ public sealed class MaterialItem
         Suffix = suffix;
         Spec = spec;
         Name = name;
+        DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName;
         Description = description;
         SpecNormalized = specNormalized;
         Brand = brand;
