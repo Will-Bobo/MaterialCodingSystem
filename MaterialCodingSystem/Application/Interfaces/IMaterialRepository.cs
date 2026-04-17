@@ -13,6 +13,8 @@ public sealed record MaterialGroupSnapshot(
 
 public sealed record MaterialItemStatusSnapshot(string Code, int Status);
 
+public sealed record MaterialItemCodeSpecSnapshot(string Code, string Spec);
+
 public interface IMaterialRepository
 {
     // 约束名用于 Application 判定是否需要重试（与 SqliteMaterialRepository 解析结果一致）
@@ -51,6 +53,9 @@ public interface IMaterialRepository
     Task<MaterialItemStatusSnapshot?> GetBaseItemStatusByGroupIdAsync(int groupId, CancellationToken ct = default);
 
     Task<MaterialItemStatusSnapshot?> GetItemStatusByCodeAsync(string code, CancellationToken ct = default);
+
+    /// <summary>BOM 审核：按 code 查询该物料的 spec（用于 code/spec 对应一致性判定）。</summary>
+    Task<MaterialItemCodeSpecSnapshot?> GetCodeSpecByCodeAsync(string code, CancellationToken ct = default);
 
     Task<int?> GetGroupIdByItemCodeAsync(string code, CancellationToken ct = default);
 

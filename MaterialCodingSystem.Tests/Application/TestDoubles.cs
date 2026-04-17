@@ -171,6 +171,14 @@ internal sealed class FakeMaterialRepository : IMaterialRepository
         return Task.FromResult<MaterialItemStatusSnapshot?>(new MaterialItemStatusSnapshot(code, ItemStatusByCode));
     }
 
+    public string ItemSpecByCode { get; set; } = "SPEC";
+
+    public Task<MaterialItemCodeSpecSnapshot?> GetCodeSpecByCodeAsync(string code, CancellationToken ct = default)
+    {
+        if (!ItemExistsByCode) return Task.FromResult<MaterialItemCodeSpecSnapshot?>(null);
+        return Task.FromResult<MaterialItemCodeSpecSnapshot?>(new MaterialItemCodeSpecSnapshot(code, ItemSpecByCode));
+    }
+
     public Task<int?> GetGroupIdByItemCodeAsync(string code, CancellationToken ct = default)
         => Task.FromResult<int?>(GroupExists ? 1 : null);
 

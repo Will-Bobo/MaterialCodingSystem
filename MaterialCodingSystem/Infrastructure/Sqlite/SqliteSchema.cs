@@ -79,6 +79,19 @@ public static class SqliteSchema
                      CREATE INDEX IF NOT EXISTS idx_item_category_spec_norm ON material_item(category_code, spec_normalized);
                      CREATE INDEX IF NOT EXISTS idx_material_item_group_id ON material_item(group_id);
                      CREATE INDEX IF NOT EXISTS idx_material_item_status ON material_item(status);
+
+                     -- V1.4：BOM 轻量归档索引表（不存明细）
+                     CREATE TABLE IF NOT EXISTS bom_archive (
+                       id INTEGER PRIMARY KEY AUTOINCREMENT,
+                       finished_code TEXT NOT NULL,
+                       version TEXT NOT NULL,
+                       file_path TEXT NOT NULL,
+                       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                       UNIQUE(finished_code, version)
+                     );
+
+                     CREATE INDEX IF NOT EXISTS idx_bom_archive_finished_created
+                     ON bom_archive(finished_code, created_at DESC);
                      """,
             transaction: tx);
         tx.Commit();

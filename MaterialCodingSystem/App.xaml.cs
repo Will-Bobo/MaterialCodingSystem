@@ -3,11 +3,13 @@ using MaterialCodingSystem.Application.Interfaces;
 using MaterialCodingSystem.Infrastructure.Excel;
 using MaterialCodingSystem.Infrastructure.Preferences;
 using MaterialCodingSystem.Infrastructure.Sqlite;
+using MaterialCodingSystem.Infrastructure.Storage;
 using MaterialCodingSystem.Presentation.Scheduling;
 using MaterialCodingSystem.Presentation.Services;
 using MaterialCodingSystem.Presentation.UiSemantics;
 using MaterialCodingSystem.Presentation.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
@@ -25,6 +27,8 @@ public partial class App : System.Windows.Application
 
         var sc = new ServiceCollection();
 
+        sc.AddLogging(b => b.AddDebug());
+
         sc.AddSingleton<IDatabasePathProvider, DatabasePathProvider>();
 
         // 组合根在 BuildServiceProvider 前需要 dbPath，因此此处临时 new 一次。
@@ -41,9 +45,19 @@ public partial class App : System.Windows.Application
         sc.AddSingleton<IFileSaveDialog, WpfSaveExcelFileDialog>();
         sc.AddSingleton<IFileDbSaveDialog, WpfSaveDbFileDialog>();
         sc.AddSingleton<IFileOpenDialog, WpfOpenDbFileDialog>();
+        sc.AddSingleton<IBomExcelOpenFileDialog, WpfOpenBomExcelFileDialog>();
         sc.AddSingleton<IRestoreReadOnlyLockNotifier, WpfRestoreReadOnlyLockNotifier>();
         sc.AddSingleton<IExcelMaterialExporter, ClosedXmlMaterialExcelExporter>();
         sc.AddSingleton<IDebouncer>(_ => new WpfDebouncer(Dispatcher.CurrentDispatcher));
+        sc.AddSingleton<IAppExecutionDirectoryProvider, AppExecutionDirectoryProvider>();
+        sc.AddSingleton<IFileSystemBomArchiveStorage, FileSystemBomArchiveStorage>();
+        sc.AddTransient<IBomArchiveRepository, SqliteBomArchiveRepository>();
+        // BOM Excel 解析（统一解析器：Adapter + Domain Rules）
+        sc.AddSingleton<MaterialCodingSystem.Infrastructure.Excel.Adapters.ClosedXmlBomGridAdapter>();
+        sc.AddSingleton<MaterialCodingSystem.Infrastructure.Excel.Adapters.ExcelDataReaderBomGridAdapter>();
+        sc.AddSingleton<IBomGridParser, UnifiedBomGridParser>();
+        sc.AddTransient<ParseBomUseCase>();
+        sc.AddSingleton<IBomFileFormatDetector, BomFileFormatDetector>();
 
         // dbPath 来源必须唯一：%LocalAppData%\MaterialCodingSystem\mcs.db（由 IDatabasePathProvider 提供）
         sc.AddPersistence(dbPath);
@@ -60,6 +74,20 @@ public partial class App : System.Windows.Application
                 sp.GetRequiredService<SqliteUnitOfWork>(),
                 sp.GetRequiredService<SqliteMaterialRepository>(),
                 sp.GetRequiredService<IExcelMaterialExporter>()));
+
+        sc.AddTransient(sp => new AnalyzeBomUseCase(
+            sp.GetRequiredService<ParseBomUseCase>(),
+            sp.GetRequiredService<IBomFileFormatDetector>(),
+            sp.GetRequiredService<SqliteMaterialRepository>(),
+            sp.GetRequiredService<SqliteUnitOfWork>(),
+            sp.GetRequiredService<ILogger<AnalyzeBomUseCase>>()));
+        sc.AddTransient<BomArchiveService>();
+        sc.AddSingleton<BomImportInProgressGate>();
+        sc.AddTransient<CanArchiveBomUseCase>();
+        sc.AddTransient<ArchiveBomUseCase>();
+        sc.AddTransient<GetBomArchiveListUseCase>();
+        sc.AddTransient<ImportBomNewMaterialsUseCase>();
+        sc.AddTransient<ValidateBomArchiveIntegrityUseCase>();
 
         sc.AddSingleton<MainViewModel>();
 

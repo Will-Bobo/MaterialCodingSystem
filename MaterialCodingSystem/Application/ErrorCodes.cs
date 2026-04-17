@@ -28,5 +28,18 @@ public static class ErrorCodes
     public const string DB_RESTORE_SOURCE_INVALID = "DB_RESTORE_SOURCE_INVALID";
     public const string DB_RESTORE_CLOSE_CONNECTION_FAILED = "DB_RESTORE_CLOSE_CONNECTION_FAILED";
     public const string DB_RESTORE_REPLACE_FAILED = "DB_RESTORE_REPLACE_FAILED";
+
+    // V1.4 BOM 审核中心（Phase1：解析 + 审核）
+    public const string BOM_FILE_INVALID = "BOM_FILE_INVALID";
+    public const string BOM_HEADER_MISSING = "BOM_HEADER_MISSING";
+    /// <summary>上传/归档目标文件被占用（例如 Excel 正打开该文件）。</summary>
+    public const string BOM_FILE_LOCKED = "BOM_FILE_LOCKED";
+    public const string BOM_ARCHIVE_VERSION_EXISTS = "BOM_ARCHIVE_VERSION_EXISTS";
+    public const string BOM_ARCHIVE_WRITE_FAILED = "BOM_ARCHIVE_WRITE_FAILED";
+    /// <summary>仅路径生成失败时使用（例如 finished_code/version 导致无法生成合法路径）。</summary>
+    public const string BOM_ARCHIVE_PATH_INVALID = "BOM_ARCHIVE_PATH_INVALID";
+    public const string BOM_IMPORT_IN_PROGRESS = "BOM_IMPORT_IN_PROGRESS";
+    public const string BOM_ANALYZE_INCONSISTENT_STATE = "BOM_ANALYZE_INCONSISTENT_STATE";
+    public const string INVALID_EXCEL = "INVALID_EXCEL";
 }
 

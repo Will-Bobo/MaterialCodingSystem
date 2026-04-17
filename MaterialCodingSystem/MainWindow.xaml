@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:conv="clr-namespace:MaterialCodingSystem.Presentation.Converters"
+        xmlns:views="clr-namespace:MaterialCodingSystem.Presentation.Views"
         mc:Ignorable="d"
         Title="Material Coding System" Height="840" Width="1200">
     <Window.Resources>
@@ -18,6 +19,7 @@
         <conv:StatusToIsActiveBoolConverter x:Key="StatusToIsActiveBool"/>
         <conv:StatusToBrushConverter x:Key="StatusToBrush"/>
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVis"/>
+        <conv:BomAuditStatusToVisibilityConverter x:Key="BomAuditStatusToVis"/>
 
         <Style TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI"/>
@@ -901,6 +903,14 @@
                                    Text="{Binding Export.Result}"/>
                     </Border>
                 </StackPanel>
+            </TabItem>
+
+            <TabItem Header="BOM审核中心">
+                <views:BomAuditView DataContext="{Binding BomAudit}"/>
+            </TabItem>
+
+            <TabItem Header="BOM归档历史">
+                <views:BomArchiveHistoryView DataContext="{Binding BomArchiveHistory}"/>
             </TabItem>
         </TabControl>
     </Grid>

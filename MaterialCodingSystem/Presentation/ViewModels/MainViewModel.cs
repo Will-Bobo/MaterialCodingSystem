@@ -22,6 +22,8 @@ public sealed class MainViewModel : ViewModelBase
     public SearchViewModel Search { get; }
     public DeprecateViewModel Deprecate { get; }
     public ExportViewModel Export { get; }
+    public BomAuditViewModel BomAudit { get; }
+    public BomArchiveHistoryViewModel BomArchiveHistory { get; }
 
     public MainViewModel(
         MaterialApplicationService app,
@@ -34,7 +36,14 @@ public sealed class MainViewModel : ViewModelBase
         IFileSaveDialog saveDialog,
         IFileDbSaveDialog dbSaveDialog,
         IFileOpenDialog openDialog,
-        IUiDialogService dialogs)
+        IUiDialogService dialogs,
+        AnalyzeBomUseCase analyzeBom,
+        ImportBomNewMaterialsUseCase importBomNew,
+        CanArchiveBomUseCase canArchiveBom,
+        ArchiveBomUseCase archiveBom,
+        BomArchiveService bomArchive,
+        GetBomArchiveListUseCase bomHistory,
+        IBomExcelOpenFileDialog bomOpenDialog)
     {
         _app = app;
         _uiRenderer = uiRenderer;
@@ -52,6 +61,8 @@ public sealed class MainViewModel : ViewModelBase
         Search = new SearchViewModel(app, this, uiRenderer, uiDispatcher);
         Deprecate = new DeprecateViewModel(app, uiRenderer, uiDispatcher);
         Export = new ExportViewModel(app, backup, paths, exportPathStore, saveDialog, dbSaveDialog, openDialog, dialogs, uiRenderer, uiDispatcher);
+        BomAudit = new BomAuditViewModel(analyzeBom, importBomNew, canArchiveBom, archiveBom, bomHistory, bomOpenDialog, uiRenderer, uiDispatcher);
+        BomArchiveHistory = new BomArchiveHistoryViewModel(bomHistory, uiRenderer, uiDispatcher);
     }
 
     private Task OpenAddCategoryDialog()

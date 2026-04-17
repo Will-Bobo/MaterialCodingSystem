@@ -12,7 +12,10 @@ public static class SpecNormalizer
             return string.Empty;
         }
 
-        var trimmed = description.Trim();
+        // V1.4 增量：中文逗号统一转英文逗号（公共 Normalize 模块统一生效）
+        var replacedComma = description.Replace('，', ',');
+
+        var trimmed = replacedComma.Trim();
         if (trimmed.Length == 0)
         {
             return string.Empty;
