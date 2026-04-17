@@ -38,17 +38,17 @@ public sealed class ParseBomUseCase
     private static Result<BomParsedDocument> MapFailure(MaterialCodingSystem.Domain.Services.Models.BomParsingFailure? f)
     {
         if (f is null)
-            return Result<BomParsedDocument>.Fail(ErrorCodes.BOM_FILE_INVALID, "failed to parse excel.");
+            return Result<BomParsedDocument>.Fail(ErrorCodes.BOM_FILE_INVALID, "解析 BOM 失败。");
 
         return f.Kind switch
         {
             MaterialCodingSystem.Domain.Services.Models.BomParsingFailureKind.HeaderMissing
-                => Result<BomParsedDocument>.Fail(ErrorCodes.BOM_HEADER_MISSING, "finished_code/version missing."),
+                => Result<BomParsedDocument>.Fail(ErrorCodes.BOM_HEADER_MISSING, "表头缺失：未识别到成品编码或版本号。"),
             MaterialCodingSystem.Domain.Services.Models.BomParsingFailureKind.DetailHeaderRowNotFound
-                => Result<BomParsedDocument>.Fail(ErrorCodes.BOM_FILE_INVALID, "detail header row not found."),
+                => Result<BomParsedDocument>.Fail(ErrorCodes.BOM_FILE_INVALID, "明细表头行未找到。"),
             MaterialCodingSystem.Domain.Services.Models.BomParsingFailureKind.MissingColumn
-                => Result<BomParsedDocument>.Fail(ErrorCodes.BOM_FILE_INVALID, $"missing column: {f.MissingColumnName}"),
-            _ => Result<BomParsedDocument>.Fail(ErrorCodes.BOM_FILE_INVALID, "failed to parse excel.")
+                => Result<BomParsedDocument>.Fail(ErrorCodes.BOM_FILE_INVALID, $"缺少必需列：{f.MissingColumnName}"),
+            _ => Result<BomParsedDocument>.Fail(ErrorCodes.BOM_FILE_INVALID, "解析 BOM 失败。")
         };
     }
 }

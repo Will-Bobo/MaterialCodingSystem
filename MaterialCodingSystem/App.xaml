@@ -15,6 +15,7 @@
             <conv:BomAuditStatusToVisibilityConverter x:Key="BomAuditStatusToVis"/>
             <conv:BomAuditStatusToTextConverter x:Key="BomAuditStatusToText"/>
             <conv:BomAuditStatusToBrushConverter x:Key="BomAuditStatusToBrush"/>
+            <conv:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVis"/>
 
             <ResourceDictionary.MergedDictionaries>
 

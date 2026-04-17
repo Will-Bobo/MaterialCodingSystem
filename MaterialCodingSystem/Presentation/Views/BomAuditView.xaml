@@ -48,19 +48,37 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <TextBlock FontWeight="SemiBold" Text="成品编码：" />
-                    <TextBlock Margin="6,0,0,0" Text="{Binding FinishedCode}" />
+                    <TextBlock FontWeight="SemiBold" Text="成品编码：" VerticalAlignment="Top"/>
+                    <Border Margin="6,0,0,0"
+                            Padding="8,2"
+                            CornerRadius="4"
+                            Background="#FFF7ED"
+                            BorderBrush="#FDBA74"
+                            BorderThickness="1"
+                            VerticalAlignment="Top"
+                            Visibility="{Binding FinishedCode, Converter={StaticResource StringNotEmptyToVis}}">
+                        <TextBlock FontWeight="SemiBold" Foreground="#9A3412" Text="{Binding FinishedCode}" />
+                    </Border>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <TextBlock FontWeight="SemiBold" Text="版本：" />
-                    <TextBlock Margin="6,0,0,0" Text="{Binding Version}" />
+                    <TextBlock FontWeight="SemiBold" Text="版本：" VerticalAlignment="Top"/>
+                    <Border Margin="6,0,0,0"
+                            Padding="8,2"
+                            CornerRadius="4"
+                            Background="#FFF7ED"
+                            BorderBrush="#FDBA74"
+                            BorderThickness="1"
+                            VerticalAlignment="Top"
+                            Visibility="{Binding Version, Converter={StaticResource StringNotEmptyToVis}}">
+                        <TextBlock FontWeight="SemiBold" Foreground="#9A3412" Text="{Binding Version}" />
+                    </Border>
                 </StackPanel>
 
                 <TextBlock Grid.Column="2" Text="{Binding Total, StringFormat=总数 {0}}" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="3" Text="{Binding Pass, StringFormat=PASS {0}}" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="4" Text="{Binding New, StringFormat=新物料 {0}}" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="5" Text="{Binding Error, StringFormat=异常物料 {0}}" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="6" Text="{Binding MissingCodeError, StringFormat=缺编码 {0}}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="3" Text="{Binding Pass, StringFormat=PASS {0}}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#16A34A" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="4" Text="{Binding New, StringFormat=新物料 {0}}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#2563EB" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="5" Text="{Binding Error, StringFormat=异常物料 {0}}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#DC2626" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="6" Text="{Binding MissingCodeError, StringFormat=缺编码 {0}}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#DC2626" FontWeight="SemiBold"/>
             </Grid>
         </Border>
 

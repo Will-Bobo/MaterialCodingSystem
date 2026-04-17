@@ -115,12 +115,30 @@ public sealed class BomAuditViewModel : ViewModelBase
         ImportRowCommand = new RelayCommand<BomAuditRowViewModel>(async r => await ImportRowAsync(r), r => r is not null);
     }
 
+    private void ClearAuditResultState()
+    {
+        FinishedCode = "";
+        Version = "";
+        Total = 0;
+        Pass = 0;
+        New = 0;
+        Error = 0;
+        MissingCodeError = 0;
+        Rows.Clear();
+        ImportSummary = "";
+        CanArchive = false;
+        CannotArchiveReason = "";
+    }
+
     private Task PickFileAsync()
     {
         var path = _openDialog.ShowOpenBomExcel(null);
         if (!string.IsNullOrWhiteSpace(path))
         {
             FilePath = path;
+            // 切换文件后必须清空上一轮结果，避免“报错但仍显示旧 BOM 数据”的误解
+            ClearAuditResultState();
+            Message = "";
             AnalyzeCommand.RaiseCanExecuteChanged();
             ImportAllNewCommand.RaiseCanExecuteChanged();
             ArchiveCommand.RaiseCanExecuteChanged();
@@ -137,6 +155,8 @@ public sealed class BomAuditViewModel : ViewModelBase
             if (!res.IsSuccess || res.Data is null)
             {
                 Message = $"{res.Error?.Code} {res.Error?.Message}".Trim();
+                // 解析失败：清空主数据区，避免残留上一轮解析结果
+                ClearAuditResultState();
                 return;
             }
 
@@ -145,6 +165,7 @@ public sealed class BomAuditViewModel : ViewModelBase
         catch (Exception ex)
         {
             Message = "分析失败：" + ex.Message;
+            ClearAuditResultState();
         }
     }
 
