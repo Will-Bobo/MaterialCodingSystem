@@ -13,6 +13,8 @@
 
             <!-- 全局 Converter：避免 UserControl 内 StaticResource 找不到 -->
             <conv:BomAuditStatusToVisibilityConverter x:Key="BomAuditStatusToVis"/>
+            <conv:BomAuditStatusToTextConverter x:Key="BomAuditStatusToText"/>
+            <conv:BomAuditStatusToBrushConverter x:Key="BomAuditStatusToBrush"/>
 
             <ResourceDictionary.MergedDictionaries>
 

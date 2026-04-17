@@ -13,8 +13,11 @@ public sealed class BomAuditRowViewModel : ViewModelBase
     public string Code { get; }
     public string Name { get; }
     public string Spec { get; }
+    public string Description { get; }
+    public string Brand { get; }
     public string ErrorReason { get; }
     public BomAuditStatus StatusRaw { get; }
+    public bool ShowImportButton { get; }
 
     public BomAuditRowViewModel(BomAuditRowDto dto)
     {
@@ -24,7 +27,13 @@ public sealed class BomAuditRowViewModel : ViewModelBase
         Code = dto.Code;
         Name = dto.Name;
         Spec = dto.Spec;
+        Description = dto.Description;
+        Brand = dto.Brand;
         ErrorReason = dto.ErrorReason ?? "";
+        // UI 规则：NEW 行显示导入按钮；若导入失败原因是“分类不存在…”，仍允许继续点击（用户新增分类后可重试）
+        ShowImportButton = StatusRaw == BomAuditStatus.NEW
+                           || (StatusRaw == BomAuditStatus.ERROR
+                               && string.Equals(ErrorReason, "分类不存在，请新增物料分类后再尝试", StringComparison.Ordinal));
     }
 }
 
@@ -144,6 +153,7 @@ public sealed class BomAuditViewModel : ViewModelBase
         try
         {
             if (string.IsNullOrWhiteSpace(FilePath)) return;
+            if (!ConfirmBatchImport()) return;
             var res = await _importNew.ExecuteAsync(new ImportBomNewMaterialsRequest(FilePath));
             if (!res.IsSuccess || res.Data is null)
             {
@@ -174,12 +184,35 @@ public sealed class BomAuditViewModel : ViewModelBase
         }
     }
 
+    private bool ConfirmBatchImport()
+    {
+        var count = New;
+        if (count <= 0) return true;
+        var title = "确认批量导入新物料";
+        var body = $"即将批量导入新物料：{count} 条。\n\n是否继续？";
+        return _ui.Confirm(title, body);
+    }
+
     private async Task ImportRowAsync(BomAuditRowViewModel? row)
     {
         try
         {
             if (row is null) return;
             if (string.IsNullOrWhiteSpace(FilePath)) return;
+
+            if (string.IsNullOrWhiteSpace(row.Code) || row.Code.Trim().Length < 3)
+                return;
+
+            var model = new MaterialCodingSystem.Presentation.Models.CreateMaterialConfirmModel
+            {
+                Code = row.Code,
+                Spec = row.Spec,
+                Description = row.Description,
+                Name = row.Name,
+                Brand = row.Brand
+            };
+            if (!_ui.ConfirmImportMaterial(model))
+                return;
 
             var res = await _importNew.ExecuteAsync(new ImportBomNewMaterialsRequest(FilePath, ExcelRowNo: row.ExcelRowNo));
             if (!res.IsSuccess || res.Data is null)

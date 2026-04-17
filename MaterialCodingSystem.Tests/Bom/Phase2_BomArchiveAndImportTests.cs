@@ -130,6 +130,115 @@ VALUES (1,1,'ZDA','ZDA0000001A','A','R','d1','S-DUP','D1',NULL,1);
     }
 
     [Fact]
+    public async Task ImportNew_When_Brand_Missing_Should_Return_ERROR_And_Not_Create_Material()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        var conn = db.Connection;
+        await conn.ExecuteAsync("INSERT INTO category(code,name) VALUES ('ZDA','R');");
+
+        var repo = new SqliteMaterialRepository(conn);
+        var uow = new SqliteUnitOfWork(conn);
+        var gridParser = new UnifiedBomGridParser(
+            NullLogger<UnifiedBomGridParser>.Instance,
+            new MaterialCodingSystem.Infrastructure.Excel.Adapters.ClosedXmlBomGridAdapter(),
+            new MaterialCodingSystem.Infrastructure.Excel.Adapters.ExcelDataReaderBomGridAdapter());
+        var parseBom = new ParseBomUseCase(gridParser);
+        var detector = new MaterialCodingSystem.Infrastructure.Excel.BomFileFormatDetector();
+        var analyze = new AnalyzeBomUseCase(parseBom, detector, repo, uow, NullLogger<AnalyzeBomUseCase>.Instance);
+        var app = new MaterialApplicationService(uow, repo);
+        var import = new ImportBomNewMaterialsUseCase(analyze, app, new BomImportInProgressGate(), NullLogger<ImportBomNewMaterialsUseCase>.Instance);
+
+        var path = WriteBomTempFile(wb =>
+        {
+            var ws = wb.AddWorksheet("BOM");
+            ws.Cell(1, 1).Value = "成品编码";
+            ws.Cell(1, 2).Value = "CP";
+            ws.Cell(2, 1).Value = "PCBA版本号";
+            ws.Cell(2, 2).Value = "V";
+
+            ws.Cell(5, 1).Value = "编码";
+            ws.Cell(5, 2).Value = "名称";
+            ws.Cell(5, 3).Value = "描述";
+            ws.Cell(5, 4).Value = "规格";
+            ws.Cell(5, 5).Value = "品牌";
+
+            ws.Cell(6, 1).Value = "ZDA0000099A";
+            ws.Cell(6, 2).Value = "n";
+            ws.Cell(6, 3).Value = "d";
+            ws.Cell(6, 4).Value = "S-NEW-BRAND";
+            ws.Cell(6, 5).Value = ""; // brand missing
+        });
+
+        try
+        {
+            var after = await import.ExecuteAsync(new ImportBomNewMaterialsRequest(path));
+            Assert.True(after.IsSuccess, after.Error?.Message);
+            Assert.Equal(1, after.Data!.AnalyzeResult.ErrorCount);
+            Assert.Equal("品牌为必填项", after.Data.AnalyzeResult.Rows[0].ErrorReason);
+
+            var count = await conn.ExecuteScalarAsync<int>("SELECT COUNT(1) FROM material_item WHERE code='ZDA0000099A';");
+            Assert.Equal(0, count);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ImportNew_When_Description_Missing_Should_Return_ERROR_With_Required_Description_Reason()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        var conn = db.Connection;
+        await conn.ExecuteAsync("INSERT INTO category(code,name) VALUES ('ZDA','R');");
+
+        var repo = new SqliteMaterialRepository(conn);
+        var uow = new SqliteUnitOfWork(conn);
+        var gridParser = new UnifiedBomGridParser(
+            NullLogger<UnifiedBomGridParser>.Instance,
+            new MaterialCodingSystem.Infrastructure.Excel.Adapters.ClosedXmlBomGridAdapter(),
+            new MaterialCodingSystem.Infrastructure.Excel.Adapters.ExcelDataReaderBomGridAdapter());
+        var parseBom = new ParseBomUseCase(gridParser);
+        var detector = new MaterialCodingSystem.Infrastructure.Excel.BomFileFormatDetector();
+        var analyze = new AnalyzeBomUseCase(parseBom, detector, repo, uow, NullLogger<AnalyzeBomUseCase>.Instance);
+        var app = new MaterialApplicationService(uow, repo);
+        var import = new ImportBomNewMaterialsUseCase(analyze, app, new BomImportInProgressGate(), NullLogger<ImportBomNewMaterialsUseCase>.Instance);
+
+        var path = WriteBomTempFile(wb =>
+        {
+            var ws = wb.AddWorksheet("BOM");
+            ws.Cell(1, 1).Value = "成品编码";
+            ws.Cell(1, 2).Value = "CP";
+            ws.Cell(2, 1).Value = "PCBA版本号";
+            ws.Cell(2, 2).Value = "V";
+
+            ws.Cell(5, 1).Value = "编码";
+            ws.Cell(5, 2).Value = "名称";
+            ws.Cell(5, 3).Value = "描述";
+            ws.Cell(5, 4).Value = "规格";
+            ws.Cell(5, 5).Value = "品牌";
+
+            ws.Cell(6, 1).Value = "ZDA0000100A";
+            ws.Cell(6, 2).Value = "n";
+            ws.Cell(6, 3).Value = ""; // description missing
+            ws.Cell(6, 4).Value = "S-NEW-DESC";
+            ws.Cell(6, 5).Value = "B";
+        });
+
+        try
+        {
+            var after = await import.ExecuteAsync(new ImportBomNewMaterialsRequest(path));
+            Assert.True(after.IsSuccess, after.Error?.Message);
+            Assert.Equal(1, after.Data!.AnalyzeResult.ErrorCount);
+            Assert.Equal("规格描述为必填项", after.Data.AnalyzeResult.Rows[0].ErrorReason);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task Archive_When_Duplicate_Version_Should_Be_BOM_ARCHIVE_VERSION_EXISTS()
     {
         await using var db = await SqliteTestDb.CreateAsync();

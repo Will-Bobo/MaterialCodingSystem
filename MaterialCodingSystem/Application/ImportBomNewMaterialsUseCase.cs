@@ -62,6 +62,16 @@ public sealed class ImportBomNewMaterialsUseCase
         {
             ct.ThrowIfCancellationRequested();
 
+            // 与“新建主物料A”体验保持一致：品牌必填。描述必填已由 Manual create 链路校验。
+            if (string.IsNullOrWhiteSpace(row.Brand))
+            {
+                failures[row.ExcelRowNo] = "品牌为必填项";
+                _logger.LogWarning(
+                    "BOM import row blocked (missing brand). finished_code={finishedCode} version={version} excel_row={excelRow}",
+                    before.Data.FinishedCode, before.Data.Version, row.ExcelRowNo);
+                continue;
+            }
+
             // category_code derived from code prefix (3 chars). PRD: BOM 不自动生成编码；NEW 的 code 必非空。
             var categoryCode = row.Code.Length >= 3 ? row.Code[..3] : "";
             var create = await _materials.CreateMaterialItemManual(new CreateMaterialItemManualRequest(
@@ -75,7 +85,7 @@ public sealed class ImportBomNewMaterialsUseCase
 
             if (!create.IsSuccess)
             {
-                var reason = MapImportFailureToReason(create.Error!.Code);
+                var reason = MapImportFailureToReason(create.Error!.Code, create.Error.Message);
                 failures[row.ExcelRowNo] = reason;
                 _logger.LogWarning("BOM import row failed. finished_code={finishedCode} version={version} excel_row={excelRow} error_code={errorCode} reason={reason}",
                     before.Data.FinishedCode, before.Data.Version, row.ExcelRowNo, create.Error!.Code, reason);
@@ -139,14 +149,16 @@ public sealed class ImportBomNewMaterialsUseCase
         }
     }
 
-    private static string MapImportFailureToReason(string errorCode)
+    private static string MapImportFailureToReason(string errorCode, string? errorMessage)
         => errorCode switch
         {
             ErrorCodes.CODE_DUPLICATE => "编码已存在",
             ErrorCodes.SPEC_DUPLICATE => "规格已存在，疑似重复建料",
             ErrorCodes.CODE_FORMAT_INVALID => "物料编码格式不正确",
             ErrorCodes.CATEGORY_MISMATCH => "编码分类与当前选择分类不一致",
-            ErrorCodes.CATEGORY_NOT_FOUND => "分类不存在或已失效",
+            ErrorCodes.CATEGORY_NOT_FOUND => "分类不存在，请新增物料分类后再尝试",
+            ErrorCodes.VALIDATION_ERROR when string.Equals(errorMessage, "description is required.", StringComparison.Ordinal)
+                => "规格描述为必填项",
             _ => "导入失败"
         };
 }

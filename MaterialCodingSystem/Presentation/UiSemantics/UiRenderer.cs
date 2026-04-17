@@ -12,9 +12,13 @@ public interface IUiRenderer
 
     void LogTechnicalFailure(AppError error);
 
+    bool Confirm(string title, string body);
+
     bool ConfirmDuplicateCreate();
 
     bool ConfirmCreateMaterial(CreateMaterialConfirmModel model);
+
+    bool ConfirmImportMaterial(CreateMaterialConfirmModel model);
 
     bool ConfirmCreateReplacement(CreateReplacementConfirmModel model);
 
@@ -39,6 +43,8 @@ public sealed class WpfUiRenderer : IUiRenderer
         return UiPolicy.Resolve(error, context);
     }
 
+    public bool Confirm(string title, string body) => _dialogs.Confirm(title, body);
+
     public bool ConfirmDuplicateCreate()
     {
         return _dialogs.Confirm(
@@ -48,6 +54,30 @@ public sealed class WpfUiRenderer : IUiRenderer
 
     public bool ConfirmCreateMaterial(CreateMaterialConfirmModel model)
     {
+        model = model with
+        {
+            WindowTitle = "确认创建主物料",
+            HintText = "请确认以下信息后再创建",
+            ConfirmButtonText = "确认创建",
+            CancelButtonText = "取消"
+        };
+        var dlg = new CreateMaterialConfirmWindow(model)
+        {
+            Owner = System.Windows.Application.Current?.MainWindow
+        };
+        var r = dlg.ShowDialog();
+        return r == true;
+    }
+
+    public bool ConfirmImportMaterial(CreateMaterialConfirmModel model)
+    {
+        model = model with
+        {
+            WindowTitle = "确认导入物料库",
+            HintText = "请确认以下信息后再导入",
+            ConfirmButtonText = "确认导入",
+            CancelButtonText = "取消"
+        };
         var dlg = new CreateMaterialConfirmWindow(model)
         {
             Owner = System.Windows.Application.Current?.MainWindow

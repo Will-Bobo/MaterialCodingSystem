@@ -42,9 +42,13 @@ public sealed class CreateMaterialViewModelTests
         {
         }
 
+        public bool Confirm(string title, string body) => true;
+
         public bool ConfirmDuplicateCreate() => true;
 
         public bool ConfirmCreateMaterial(CreateMaterialConfirmModel model) => true;
+
+        public bool ConfirmImportMaterial(CreateMaterialConfirmModel model) => true;
 
         public bool ConfirmCreateReplacement(CreateReplacementConfirmModel model) => true;
 

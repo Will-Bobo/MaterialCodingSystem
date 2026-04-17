@@ -27,7 +27,7 @@
                            Text="{Binding FilePath, FallbackValue=（未选择文件）}" TextTrimming="CharacterEllipsis"/>
 
                 <Button Grid.Column="2" Margin="10,0,0,0" Content="解析/审核" Padding="12,6" Command="{Binding AnalyzeCommand}"/>
-                <Button Grid.Column="3" Margin="10,0,0,0" Content="一键导入NEW" Padding="12,6" Command="{Binding ImportAllNewCommand}"/>
+                <Button Grid.Column="3" Margin="10,0,0,0" Content="一键导入新物料" Padding="12,6" Command="{Binding ImportAllNewCommand}"/>
                 <Button Grid.Column="4" Margin="10,0,0,0" Content="保存审核通过BOM" Padding="12,6"
                         Command="{Binding ArchiveCommand}"
                         IsEnabled="{Binding CanArchive}"
@@ -58,8 +58,8 @@
 
                 <TextBlock Grid.Column="2" Text="{Binding Total, StringFormat=总数 {0}}" Margin="10,0,0,0" VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="3" Text="{Binding Pass, StringFormat=PASS {0}}" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="4" Text="{Binding New, StringFormat=NEW {0}}" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="5" Text="{Binding Error, StringFormat=ERROR {0}}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="4" Text="{Binding New, StringFormat=新物料 {0}}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="5" Text="{Binding Error, StringFormat=异常物料 {0}}" Margin="10,0,0,0" VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="6" Text="{Binding MissingCodeError, StringFormat=缺编码 {0}}" Margin="10,0,0,0" VerticalAlignment="Center"/>
             </Grid>
         </Border>
@@ -85,17 +85,33 @@
                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
                       ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="80"/>
+                    <DataGridTextColumn Header="状态" Width="90"
+                                        Binding="{Binding StatusRaw, Converter={StaticResource BomAuditStatusToText}}">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="Foreground" Value="{Binding StatusRaw, Converter={StaticResource BomAuditStatusToBrush}}"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                     <DataGridTextColumn Header="编码" Binding="{Binding Code}" Width="180"/>
                     <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="120"/>
+                    <DataGridTextColumn Header="描述" Binding="{Binding Description}" Width="*"/>
                     <DataGridTextColumn Header="规格" Binding="{Binding Spec}" Width="200"/>
-                    <DataGridTextColumn Header="异常原因" Binding="{Binding ErrorReason}" Width="*"/>
+                    <DataGridTextColumn Header="品牌" Binding="{Binding Brand}" Width="120"/>
+                    <DataGridTextColumn Header="异常原因" Binding="{Binding ErrorReason}" Width="*">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="#DC2626"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                     <DataGridTemplateColumn Header="操作" Width="120">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <Button Content="导入物料库"
                                         Padding="10,2"
-                                        Visibility="{Binding StatusRaw, Converter={StaticResource BomAuditStatusToVis}}"
+                                        Visibility="{Binding ShowImportButton, Converter={StaticResource BoolToVis}}"
                                         Command="{Binding DataContext.ImportRowCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                         CommandParameter="{Binding}"/>
                             </DataTemplate>
