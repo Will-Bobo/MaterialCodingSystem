@@ -57,17 +57,6 @@ public sealed class CanArchiveBomUseCase
             ));
         }
 
-        var exists = await _archiveRepo.ExistsAsync(a.FinishedCode, a.Version, ct);
-        if (exists)
-        {
-            return Result<CanArchiveBomResponse>.Ok(new CanArchiveBomResponse(
-                IsAllowed: false,
-                Reason: "版本已存在，禁止覆盖。",
-                FinishedCode: a.FinishedCode,
-                Version: a.Version
-            ));
-        }
-
         return Result<CanArchiveBomResponse>.Ok(new CanArchiveBomResponse(
             IsAllowed: true,
             Reason: "",

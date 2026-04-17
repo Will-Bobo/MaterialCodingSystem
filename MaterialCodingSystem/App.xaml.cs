@@ -38,7 +38,9 @@ public partial class App : System.Windows.Application
         var dataDir = Path.GetDirectoryName(dbPath)!;
         var prefsPath = Path.Combine(dataDir, "preferences.json");
 
-        sc.AddSingleton<IExportPathPreferenceStore>(_ => new JsonExportPathPreferenceStore(prefsPath));
+        sc.AddSingleton<JsonExportPathPreferenceStore>(_ => new JsonExportPathPreferenceStore(prefsPath));
+        sc.AddSingleton<IExportPathPreferenceStore>(sp => sp.GetRequiredService<JsonExportPathPreferenceStore>());
+        sc.AddSingleton<IBomArchivePreferenceStore>(sp => sp.GetRequiredService<JsonExportPathPreferenceStore>());
         sc.AddSingleton<IUiDialogService, WpfUiDialogService>();
         sc.AddSingleton<IUiRenderer, WpfUiRenderer>();
         sc.AddSingleton<IUiDispatcher, WpfUiDispatcher>();
@@ -46,6 +48,7 @@ public partial class App : System.Windows.Application
         sc.AddSingleton<IFileDbSaveDialog, WpfSaveDbFileDialog>();
         sc.AddSingleton<IFileOpenDialog, WpfOpenDbFileDialog>();
         sc.AddSingleton<IBomExcelOpenFileDialog, WpfOpenBomExcelFileDialog>();
+        sc.AddSingleton<IBomArchiveInteraction, WpfBomArchiveInteraction>();
         sc.AddSingleton<IRestoreReadOnlyLockNotifier, WpfRestoreReadOnlyLockNotifier>();
         sc.AddSingleton<IExcelMaterialExporter, ClosedXmlMaterialExcelExporter>();
         sc.AddSingleton<IDebouncer>(_ => new WpfDebouncer(Dispatcher.CurrentDispatcher));
@@ -84,6 +87,7 @@ public partial class App : System.Windows.Application
         sc.AddTransient<BomArchiveService>();
         sc.AddSingleton<BomImportInProgressGate>();
         sc.AddTransient<CanArchiveBomUseCase>();
+        sc.AddTransient<ConfigureBomArchiveRootPathUseCase>();
         sc.AddTransient<ArchiveBomUseCase>();
         sc.AddTransient<GetBomArchiveListUseCase>();
         sc.AddTransient<ImportBomNewMaterialsUseCase>();

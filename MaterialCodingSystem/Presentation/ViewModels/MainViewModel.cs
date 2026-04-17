@@ -43,6 +43,7 @@ public sealed class MainViewModel : ViewModelBase
         ArchiveBomUseCase archiveBom,
         BomArchiveService bomArchive,
         GetBomArchiveListUseCase bomHistory,
+        ConfigureBomArchiveRootPathUseCase configureBomArchiveRoot,
         IBomExcelOpenFileDialog bomOpenDialog)
     {
         _app = app;
@@ -61,7 +62,7 @@ public sealed class MainViewModel : ViewModelBase
         Search = new SearchViewModel(app, this, uiRenderer, uiDispatcher);
         Deprecate = new DeprecateViewModel(app, uiRenderer, uiDispatcher);
         Export = new ExportViewModel(app, backup, paths, exportPathStore, saveDialog, dbSaveDialog, openDialog, dialogs, uiRenderer, uiDispatcher);
-        BomAudit = new BomAuditViewModel(analyzeBom, importBomNew, canArchiveBom, archiveBom, bomHistory, bomOpenDialog, uiRenderer, uiDispatcher);
+        BomAudit = new BomAuditViewModel(analyzeBom, importBomNew, canArchiveBom, archiveBom, bomHistory, configureBomArchiveRoot, bomOpenDialog, uiRenderer, uiDispatcher);
         BomArchiveHistory = new BomArchiveHistoryViewModel(bomHistory, uiRenderer, uiDispatcher);
     }
 

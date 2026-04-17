@@ -18,6 +18,8 @@ public interface IBomArchiveRepository
 
     Task InsertAsync(string finishedCode, string version, string filePath, CancellationToken ct = default);
 
+    Task UpdateAsync(string finishedCode, string version, string filePath, CancellationToken ct = default);
+
     Task<IReadOnlyList<BomArchiveRecord>> ListAsync(string? finishedCode = null, CancellationToken ct = default);
 }
 

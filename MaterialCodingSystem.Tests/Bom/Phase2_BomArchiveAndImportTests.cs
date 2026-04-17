@@ -255,10 +255,10 @@ VALUES (1,1,'ZDA','ZDA0000001A','A','R','d1','S-DUP','D1',NULL,1);
         var src = WriteDummyFile();
         try
         {
-            var first = await svc.ArchiveAsync(src, "CP00A1062A", "KC001/V1:2026");
+            var first = await svc.ArchiveAsync(src, "CP00A1062A", "KC001/V1:2026", archiveRootPath: null, overwriteIfExists: false);
             Assert.True(first.IsSuccess, first.Error?.Message);
 
-            var second = await svc.ArchiveAsync(src, "CP00A1062A", "KC001/V1:2026");
+            var second = await svc.ArchiveAsync(src, "CP00A1062A", "KC001/V1:2026", archiveRootPath: null, overwriteIfExists: false);
             Assert.False(second.IsSuccess);
             Assert.Equal(ErrorCodes.BOM_ARCHIVE_VERSION_EXISTS, second.Error!.Code);
         }
@@ -282,7 +282,7 @@ VALUES (1,1,'ZDA','ZDA0000001A','A','R','d1','S-DUP','D1',NULL,1);
         try
         {
             var srcHash = Sha256(src);
-            var res = await svc.ArchiveAsync(src, "CP", "KC001/V1:2026");
+            var res = await svc.ArchiveAsync(src, "CP", "KC001/V1:2026", archiveRootPath: null, overwriteIfExists: false);
             Assert.True(res.IsSuccess, res.Error?.Message);
             var dst = res.Data!;
             Assert.True(File.Exists(dst));
@@ -308,7 +308,7 @@ VALUES (1,1,'ZDA','ZDA0000001A','A','R','d1','S-DUP','D1',NULL,1);
         await using var lockHandle = new FileStream(src, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
         try
         {
-            var res = await svc.ArchiveAsync(src, "CP", "V");
+            var res = await svc.ArchiveAsync(src, "CP", "V", archiveRootPath: null, overwriteIfExists: false);
             Assert.False(res.IsSuccess);
             Assert.Equal(ErrorCodes.BOM_FILE_LOCKED, res.Error!.Code);
         }

@@ -4,7 +4,7 @@ using MaterialCodingSystem.Application.Interfaces;
 
 namespace MaterialCodingSystem.Infrastructure.Preferences;
 
-public sealed class JsonExportPathPreferenceStore : IExportPathPreferenceStore
+public sealed class JsonExportPathPreferenceStore : IExportPathPreferenceStore, IBomArchivePreferenceStore
 {
     private readonly string _filePath;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -16,12 +16,39 @@ public sealed class JsonExportPathPreferenceStore : IExportPathPreferenceStore
 
     public string? GetLastExportDirectory()
     {
+        var dto = Read();
+        return string.IsNullOrWhiteSpace(dto?.LastExportDirectory) ? null : dto!.LastExportDirectory;
+    }
+
+    public void SetLastExportDirectory(string directory)
+    {
+        var dir = string.IsNullOrWhiteSpace(directory) ? null : directory.Trim();
+        var dto = Read() ?? new Dto();
+        dto.LastExportDirectory = dir;
+        Write(dto);
+    }
+
+    public string? GetBomArchiveRootPath()
+    {
+        var dto = Read();
+        return string.IsNullOrWhiteSpace(dto?.BomArchiveRootPath) ? null : dto!.BomArchiveRootPath;
+    }
+
+    public void SetBomArchiveRootPath(string rootPath)
+    {
+        var v = string.IsNullOrWhiteSpace(rootPath) ? null : rootPath.Trim();
+        var dto = Read() ?? new Dto();
+        dto.BomArchiveRootPath = v;
+        Write(dto);
+    }
+
+    private Dto? Read()
+    {
         if (!File.Exists(_filePath)) return null;
         try
         {
             var json = File.ReadAllText(_filePath);
-            var dto = JsonSerializer.Deserialize<Dto>(json);
-            return string.IsNullOrWhiteSpace(dto?.LastExportDirectory) ? null : dto.LastExportDirectory;
+            return JsonSerializer.Deserialize<Dto>(json);
         }
         catch
         {
@@ -29,10 +56,8 @@ public sealed class JsonExportPathPreferenceStore : IExportPathPreferenceStore
         }
     }
 
-    public void SetLastExportDirectory(string directory)
+    private void Write(Dto dto)
     {
-        var dir = string.IsNullOrWhiteSpace(directory) ? null : directory.Trim();
-        var dto = new Dto { LastExportDirectory = dir };
         var folder = Path.GetDirectoryName(Path.GetFullPath(_filePath));
         if (!string.IsNullOrEmpty(folder))
             Directory.CreateDirectory(folder);
@@ -42,5 +67,6 @@ public sealed class JsonExportPathPreferenceStore : IExportPathPreferenceStore
     private sealed class Dto
     {
         public string? LastExportDirectory { get; set; }
+        public string? BomArchiveRootPath { get; set; }
     }
 }

@@ -32,6 +32,8 @@ public sealed class BomArchiveService
         string sourceFilePath,
         string finishedCode,
         string version,
+        string? archiveRootPath,
+        bool overwriteIfExists,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(sourceFilePath))
@@ -42,7 +44,7 @@ public sealed class BomArchiveService
             return Result<string>.Fail(ErrorCodes.VALIDATION_ERROR, "version is required.");
 
         // 防御：即使前置已判定，也要兜底（DB UNIQUE 仍为最终仲裁）
-        if (await _repo.ExistsAsync(finishedCode, version, ct))
+        if (!overwriteIfExists && await _repo.ExistsAsync(finishedCode, version, ct))
             return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_VERSION_EXISTS, "version exists.");
 
         var sanitizedVersion = SanitizeFileName(version);
@@ -52,7 +54,7 @@ public sealed class BomArchiveService
         string finalPath;
         try
         {
-            var root = _dirs.GetExecutionDirectory();
+            var root = string.IsNullOrWhiteSpace(archiveRootPath) ? _dirs.GetExecutionDirectory() : archiveRootPath.Trim();
             finalPath = Path.Combine(root, "BOM", SanitizeDirName(finishedCode), sanitizedVersion + ext);
         }
         catch (Exception ex)
@@ -63,7 +65,10 @@ public sealed class BomArchiveService
 
         try
         {
-            await _storage.CopyToArchiveAsync(sourceFilePath, finalPath, ct);
+            if (overwriteIfExists)
+                await _storage.CopyToArchiveOverwriteAsync(sourceFilePath, finalPath, ct);
+            else
+                await _storage.CopyToArchiveAsync(sourceFilePath, finalPath, ct);
         }
         catch (FileNotFoundException ex)
         {
@@ -86,23 +91,38 @@ public sealed class BomArchiveService
             return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "archive io failed.");
         }
 
-        try
+        if (!overwriteIfExists)
         {
-            await _repo.InsertAsync(finishedCode, version, finalPath, ct);
+            try
+            {
+                await _repo.InsertAsync(finishedCode, version, finalPath, ct);
+            }
+            catch (Exception ex) when (IsUniqueViolation(ex))
+            {
+                // if DB says duplicate, cleanup file to avoid orphan
+                await _storage.DeleteIfExistsAsync(finalPath, ct);
+                _logger.LogInformation(ex, "BOM archive version exists. finished_code={finishedCode} version={version}", finishedCode, version);
+                return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_VERSION_EXISTS, "version exists.");
+            }
+            catch (Exception ex)
+            {
+                // unknown DB failure: cleanup file to avoid "file exists but DB missing"
+                await _storage.DeleteIfExistsAsync(finalPath, ct);
+                _logger.LogError(ex, "BOM archive db insert failed. finished_code={finishedCode} version={version}", finishedCode, version);
+                return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "archive db insert failed.");
+            }
         }
-        catch (Exception ex) when (IsUniqueViolation(ex))
+        else
         {
-            // if DB says duplicate, cleanup file to avoid orphan
-            await _storage.DeleteIfExistsAsync(finalPath, ct);
-            _logger.LogInformation(ex, "BOM archive version exists. finished_code={finishedCode} version={version}", finishedCode, version);
-            return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_VERSION_EXISTS, "version exists.");
-        }
-        catch (Exception ex)
-        {
-            // unknown DB failure: cleanup file to avoid "file exists but DB missing"
-            await _storage.DeleteIfExistsAsync(finalPath, ct);
-            _logger.LogError(ex, "BOM archive db insert failed. finished_code={finishedCode} version={version}", finishedCode, version);
-            return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "archive db insert failed.");
+            try
+            {
+                await _repo.UpdateAsync(finishedCode, version, finalPath, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "BOM archive db update failed. finished_code={finishedCode} version={version}", finishedCode, version);
+                return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "archive db update failed.");
+            }
         }
 
         return Result<string>.Ok(finalPath);

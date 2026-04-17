@@ -38,6 +38,21 @@ public sealed class SqliteBomArchiveRepository : IBomArchiveRepository
             cancellationToken: ct));
     }
 
+    public async Task UpdateAsync(string finishedCode, string version, string filePath, CancellationToken ct = default)
+    {
+        var sql = """
+                  UPDATE bom_archive
+                  SET file_path = @filePath,
+                      created_at = CURRENT_TIMESTAMP
+                  WHERE finished_code = @finishedCode
+                    AND version = @version;
+                  """;
+        await _connection.ExecuteAsync(new CommandDefinition(
+            sql,
+            new { finishedCode, version, filePath },
+            cancellationToken: ct));
+    }
+
     public async Task<BomArchiveRecord?> GetAsync(string finishedCode, string version, CancellationToken ct = default)
     {
         var sql = """

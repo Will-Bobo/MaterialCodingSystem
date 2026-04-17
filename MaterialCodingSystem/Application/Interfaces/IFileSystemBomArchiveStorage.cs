@@ -9,6 +9,13 @@ public interface IFileSystemBomArchiveStorage
     /// </summary>
     Task CopyToArchiveAsync(string sourceFilePath, string finalPath, CancellationToken ct = default);
 
+    /// <summary>
+    /// Copy source file to finalPath with "temp + atomic replace" semantics.
+    /// Overwrite is allowed; if finalPath exists it must be replaced atomically.
+    /// Must cleanup temp file on failure.
+    /// </summary>
+    Task CopyToArchiveOverwriteAsync(string sourceFilePath, string finalPath, CancellationToken ct = default);
+
     Task DeleteIfExistsAsync(string path, CancellationToken ct = default);
 }
 

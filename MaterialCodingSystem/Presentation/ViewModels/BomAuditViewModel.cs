@@ -44,6 +44,7 @@ public sealed class BomAuditViewModel : ViewModelBase
     private readonly CanArchiveBomUseCase _canArchiveUseCase;
     private readonly ArchiveBomUseCase _archive;
     private readonly GetBomArchiveListUseCase _history;
+    private readonly ConfigureBomArchiveRootPathUseCase _configureArchiveRoot;
     private readonly IBomExcelOpenFileDialog _openDialog;
     private readonly IUiRenderer _ui;
     private readonly IUiDispatcher _dispatcher;
@@ -86,6 +87,7 @@ public sealed class BomAuditViewModel : ViewModelBase
     public RelayCommand AnalyzeCommand { get; }
     public RelayCommand ImportAllNewCommand { get; }
     public RelayCommand ArchiveCommand { get; }
+    public RelayCommand ChangeArchiveRootCommand { get; }
 
     public RelayCommand<BomAuditRowViewModel> ImportRowCommand { get; }
 
@@ -95,6 +97,7 @@ public sealed class BomAuditViewModel : ViewModelBase
         CanArchiveBomUseCase canArchive,
         ArchiveBomUseCase archive,
         GetBomArchiveListUseCase history,
+        ConfigureBomArchiveRootPathUseCase configureArchiveRoot,
         IBomExcelOpenFileDialog openDialog,
         IUiRenderer ui,
         IUiDispatcher dispatcher)
@@ -104,6 +107,7 @@ public sealed class BomAuditViewModel : ViewModelBase
         _canArchiveUseCase = canArchive;
         _archive = archive;
         _history = history;
+        _configureArchiveRoot = configureArchiveRoot;
         _openDialog = openDialog;
         _ui = ui;
         _dispatcher = dispatcher;
@@ -112,6 +116,7 @@ public sealed class BomAuditViewModel : ViewModelBase
         AnalyzeCommand = new RelayCommand(async () => await AnalyzeAsync(), () => !string.IsNullOrWhiteSpace(FilePath));
         ImportAllNewCommand = new RelayCommand(async () => await ImportAllNewAsync(), () => !string.IsNullOrWhiteSpace(FilePath));
         ArchiveCommand = new RelayCommand(async () => await ArchiveAsync(), () => !string.IsNullOrWhiteSpace(FilePath));
+        ChangeArchiveRootCommand = new RelayCommand(async () => await ChangeArchiveRootAsync());
         ImportRowCommand = new RelayCommand<BomAuditRowViewModel>(async r => await ImportRowAsync(r), r => r is not null);
     }
 
@@ -202,6 +207,19 @@ public sealed class BomAuditViewModel : ViewModelBase
         catch (Exception ex)
         {
             Message = "归档失败：" + ex.Message;
+        }
+    }
+
+    private async Task ChangeArchiveRootAsync()
+    {
+        try
+        {
+            var res = await _configureArchiveRoot.ExecuteAsync();
+            Message = res.IsSuccess ? $"已更新归档目录：{res.Data?.RootPath}" : $"{res.Error?.Code} {res.Error?.Message}".Trim();
+        }
+        catch (Exception ex)
+        {
+            Message = "更新归档目录失败：" + ex.Message;
         }
     }
 
