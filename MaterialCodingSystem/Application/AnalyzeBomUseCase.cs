@@ -1,5 +1,6 @@
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Application.Logging;
 using MaterialCodingSystem.Domain.Services;
 using MaterialCodingSystem.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
@@ -22,17 +23,18 @@ public sealed class AnalyzeBomUseCase
         IBomFileFormatDetector formatDetector,
         IMaterialRepository repo,
         IUnitOfWork uow,
-        ILogger<AnalyzeBomUseCase> logger)
+        ILogger<AnalyzeBomUseCase>? logger = null)
     {
         _parseBom = parseBom;
         _formatDetector = formatDetector;
         _repo = repo;
         _uow = uow;
-        _logger = logger;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<AnalyzeBomUseCase>.Instance;
     }
 
     public Task<Result<AnalyzeBomResponse>> ExecuteAsync(AnalyzeBomRequest req, CancellationToken ct = default)
-        => _uow.ExecuteAsync(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.BomAnalyze, McsLog.FileNameForLog(req.FilePath), ct,
+            async () => await _uow.ExecuteAsync(async () =>
         {
             if (string.IsNullOrWhiteSpace(req.FilePath))
                 return Result<AnalyzeBomResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "file_path is required.");
@@ -198,14 +200,10 @@ public sealed class AnalyzeBomUseCase
             var err2 = outRows.Count(r => r.Status == BomAuditStatus.ERROR);
             var miss2 = outRows.Count(r => r.Status == BomAuditStatus.ERROR && r.ErrorReason == "缺少物料编码");
             if (pass2 != resp.PassCount || new2 != resp.NewCount || err2 != resp.ErrorCount || miss2 != resp.MissingCodeErrorCount)
-            {
-                _logger.LogError(
-                    "BOM analyze inconsistent. finished_code={finishedCode} version={version} pass={pass}/{pass2} new={new}/{new2} err={err}/{err2} miss={miss}/{miss2}",
-                    finishedCode, version, resp.PassCount, pass2, resp.NewCount, new2, resp.ErrorCount, err2, resp.MissingCodeErrorCount, miss2);
                 return Result<AnalyzeBomResponse>.Fail(ErrorCodes.BOM_ANALYZE_INCONSISTENT_STATE, "analyze inconsistent state.");
-            }
 
             return Result<AnalyzeBomResponse>.Ok(resp);
-        }, ct);
+        }, ct),
+            r => r.IsSuccess && r.Data is not null ? ("line_count", r.Data.Rows.Count) : null);
 }
 

@@ -1,5 +1,7 @@
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Application.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Application;
 
@@ -19,15 +21,22 @@ public sealed class CanArchiveBomUseCase
 {
     private readonly AnalyzeBomUseCase _analyze;
     private readonly IBomArchiveRepository _archiveRepo;
+    private readonly ILogger<CanArchiveBomUseCase> _logger;
 
-    public CanArchiveBomUseCase(AnalyzeBomUseCase analyze, IBomArchiveRepository archiveRepo)
+    public CanArchiveBomUseCase(
+        AnalyzeBomUseCase analyze,
+        IBomArchiveRepository archiveRepo,
+        ILogger<CanArchiveBomUseCase>? logger = null)
     {
         _analyze = analyze;
         _archiveRepo = archiveRepo;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<CanArchiveBomUseCase>.Instance;
     }
 
-    public async Task<Result<CanArchiveBomResponse>> ExecuteAsync(CanArchiveBomRequest req, CancellationToken ct = default)
-    {
+    public Task<Result<CanArchiveBomResponse>> ExecuteAsync(CanArchiveBomRequest req, CancellationToken ct = default)
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.BomCanArchive, McsLog.FileNameForLog(req.FilePath), ct,
+            async () =>
+            {
         if (string.IsNullOrWhiteSpace(req.FilePath))
             return Result<CanArchiveBomResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "file_path is required.");
 
@@ -63,6 +72,7 @@ public sealed class CanArchiveBomUseCase
             FinishedCode: a.FinishedCode,
             Version: a.Version
         ));
-    }
+            },
+            r => r.IsSuccess && r.Data is not null ? ("is_allowed", r.Data.IsAllowed) : null);
 }
 

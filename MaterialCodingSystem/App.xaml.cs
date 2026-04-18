@@ -10,7 +10,12 @@ using MaterialCodingSystem.Presentation.UiSemantics;
 using MaterialCodingSystem.Presentation.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Events;
+using Serilog.Extensions.Logging;
 using System.IO;
+using System;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -20,6 +25,8 @@ namespace MaterialCodingSystem;
 public partial class App : System.Windows.Application
 {
     public static ServiceProvider Services { get; private set; } = null!;
+    private ILogger<App>? _startupLogger;
+    private string? _finalLogDirectory;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -27,7 +34,8 @@ public partial class App : System.Windows.Application
 
         var sc = new ServiceCollection();
 
-        sc.AddLogging(b => b.AddDebug());
+        ConfigureLogging(sc);
+        RegisterGlobalExceptionLogging();
 
         sc.AddSingleton<IDatabasePathProvider, DatabasePathProvider>();
 
@@ -59,7 +67,9 @@ public partial class App : System.Windows.Application
         sc.AddSingleton<MaterialCodingSystem.Infrastructure.Excel.Adapters.ClosedXmlBomGridAdapter>();
         sc.AddSingleton<MaterialCodingSystem.Infrastructure.Excel.Adapters.ExcelDataReaderBomGridAdapter>();
         sc.AddSingleton<IBomGridParser, UnifiedBomGridParser>();
-        sc.AddTransient<ParseBomUseCase>();
+        sc.AddTransient(sp => new ParseBomUseCase(
+            sp.GetRequiredService<IBomGridParser>(),
+            sp.GetRequiredService<ILogger<ParseBomUseCase>>()));
         sc.AddSingleton<IBomFileFormatDetector, BomFileFormatDetector>();
 
         // dbPath 来源必须唯一：%LocalAppData%\MaterialCodingSystem\mcs.db（由 IDatabasePathProvider 提供）
@@ -76,7 +86,8 @@ public partial class App : System.Windows.Application
             new MaterialApplicationService(
                 sp.GetRequiredService<SqliteUnitOfWork>(),
                 sp.GetRequiredService<SqliteMaterialRepository>(),
-                sp.GetRequiredService<IExcelMaterialExporter>()));
+                sp.GetRequiredService<IExcelMaterialExporter>(),
+                sp.GetRequiredService<ILogger<MaterialApplicationService>>()));
 
         sc.AddTransient(sp => new AnalyzeBomUseCase(
             sp.GetRequiredService<ParseBomUseCase>(),
@@ -97,6 +108,8 @@ public partial class App : System.Windows.Application
 
         Services = sc.BuildServiceProvider();
 
+        TryWriteStartupLog();
+
         var window = new MainWindow
         {
             DataContext = Services.GetRequiredService<MainViewModel>()
@@ -104,5 +117,147 @@ public partial class App : System.Windows.Application
         window.Show();
 
         _ = Task.Run(() => Services.GetRequiredService<StartupOrchestrationService>().OnAppStartedAsync());
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        try
+        {
+            Log.CloseAndFlush();
+        }
+        catch
+        {
+            // 必须保证退出流程不被日志影响
+        }
+
+        base.OnExit(e);
+    }
+
+    private void ConfigureLogging(ServiceCollection sc)
+    {
+        // V1.1：日志必须优先落盘到 %LocalAppData%\MaterialCodingSystem\logs；失败不得影响启动
+        var logDir = GetPreferredLogDirectory();
+
+        try
+        {
+            Directory.CreateDirectory(logDir);
+            _finalLogDirectory = logDir;
+
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Information()
+                .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+                .Enrich.FromLogContext()
+                .WriteTo.File(
+                    path: Path.Combine(logDir, "app-.log"),
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: 30,
+                    fileSizeLimitBytes: 20 * 1024 * 1024,
+                    rollOnFileSizeLimit: true,
+                    shared: true,
+                    flushToDiskInterval: TimeSpan.FromSeconds(1))
+                .CreateLogger();
+
+            sc.AddLogging(builder =>
+            {
+                builder.ClearProviders();
+                builder.AddSerilog(dispose: false);
+            });
+
+            var factory = new SerilogLoggerFactory(Log.Logger, dispose: false);
+            _startupLogger = factory.CreateLogger<App>();
+            _startupLogger.LogInformation("Logging initialized. log_dir={logDir}", _finalLogDirectory);
+        }
+        catch (Exception ex)
+        {
+            _finalLogDirectory = null;
+
+            // Fallback：保持旧行为（Debug provider），并保证启动继续
+            sc.AddLogging(b => b.AddDebug());
+
+            try
+            {
+                var fallbackFactory = LoggerFactory.Create(b => b.AddDebug());
+                _startupLogger = fallbackFactory.CreateLogger<App>();
+                _startupLogger.LogWarning(ex, "Logging initialization failed. continue without file logging. preferred_log_dir={logDir}", logDir);
+            }
+            catch
+            {
+                // 最终兜底：什么都不做，确保启动不受影响
+            }
+        }
+    }
+
+    private static string GetPreferredLogDirectory()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localAppData))
+            return Path.Combine(Path.GetTempPath(), "MaterialCodingSystem", "logs");
+
+        return Path.Combine(localAppData, "MaterialCodingSystem", "logs");
+    }
+
+    private void RegisterGlobalExceptionLogging()
+    {
+        // DispatcherUnhandledException：UI 线程未处理异常
+        DispatcherUnhandledException += (_, args) =>
+        {
+            try
+            {
+                _startupLogger?.LogCritical(args.Exception, "Fatal exception (DispatcherUnhandledException).");
+            }
+            catch
+            {
+                // 必须保证异常处理不被日志影响
+            }
+            // 不改变现有行为：不主动设置 Handled
+        };
+
+        // AppDomain.CurrentDomain.UnhandledException：非 UI 线程未处理异常
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            try
+            {
+                if (args.ExceptionObject is Exception ex)
+                    _startupLogger?.LogCritical(ex, "Fatal exception (UnhandledException). is_terminating={isTerminating}", args.IsTerminating);
+                else
+                    _startupLogger?.LogCritical("Fatal exception (UnhandledException). is_terminating={isTerminating} exception_object={exceptionObject}", args.IsTerminating, args.ExceptionObject);
+            }
+            catch
+            {
+            }
+        };
+
+        // TaskScheduler.UnobservedTaskException：未观察到的 Task 异常
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            try
+            {
+                _startupLogger?.LogCritical(args.Exception, "Fatal exception (UnobservedTaskException).");
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                args.SetObserved();
+            }
+            catch
+            {
+            }
+        };
+    }
+
+    private void TryWriteStartupLog()
+    {
+        try
+        {
+            _startupLogger?.LogInformation("App Start.");
+            _startupLogger?.LogInformation("Log Path. log_dir={logDir}", _finalLogDirectory ?? "(not available)");
+        }
+        catch
+        {
+            // 启动日志失败不得影响启动
+        }
     }
 }

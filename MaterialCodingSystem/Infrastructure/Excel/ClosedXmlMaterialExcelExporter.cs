@@ -1,14 +1,24 @@
 using ClosedXML.Excel;
+using MaterialCodingSystem.Application;
+using MaterialCodingSystem.Application.Logging;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Infrastructure.Excel;
 
 public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
 {
+    private readonly ILogger<ClosedXmlMaterialExcelExporter> _logger;
+
     private const double RowHeight = 30d;
     private const int ColCount = 6;
     private const string ExportFontName = "宋体";
+
+    public ClosedXmlMaterialExcelExporter(ILogger<ClosedXmlMaterialExcelExporter>? logger = null)
+    {
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ClosedXmlMaterialExcelExporter>.Instance;
+    }
 
     public Task WriteAsync(string filePath, IReadOnlyList<MaterialExportRow> rows, CancellationToken ct = default)
     {
@@ -38,7 +48,16 @@ public sealed class ClosedXmlMaterialExcelExporter : IExcelMaterialExporter
         else
             AutoFitAll(wb);
 
-        wb.SaveAs(filePath);
+        try
+        {
+            wb.SaveAs(filePath);
+        }
+        catch (Exception ex)
+        {
+            McsLoggingExtensions.LogException(_logger, ex, McsActions.MaterialExportActiveMaterials, ErrorCodes.INTERNAL_ERROR);
+            throw;
+        }
+
         return Task.CompletedTask;
     }
 

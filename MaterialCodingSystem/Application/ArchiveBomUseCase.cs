@@ -1,6 +1,8 @@
 using System.IO;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Application.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Application;
 
@@ -15,23 +17,28 @@ public sealed class ArchiveBomUseCase
     private readonly IBomArchiveRepository _repo;
     private readonly IBomArchivePreferenceStore _prefs;
     private readonly IBomArchiveInteraction _ui;
+    private readonly ILogger<ArchiveBomUseCase> _logger;
 
     public ArchiveBomUseCase(
         CanArchiveBomUseCase canArchive,
         BomArchiveService archive,
         IBomArchiveRepository repo,
         IBomArchivePreferenceStore prefs,
-        IBomArchiveInteraction ui)
+        IBomArchiveInteraction ui,
+        ILogger<ArchiveBomUseCase>? logger = null)
     {
         _canArchive = canArchive;
         _archive = archive;
         _repo = repo;
         _prefs = prefs;
         _ui = ui;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ArchiveBomUseCase>.Instance;
     }
 
-    public async Task<Result<ArchiveBomResponse>> ExecuteAsync(ArchiveBomRequest req, CancellationToken ct = default)
-    {
+    public Task<Result<ArchiveBomResponse>> ExecuteAsync(ArchiveBomRequest req, CancellationToken ct = default)
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.BomArchive, McsLog.FileNameForLog(req.FilePath), ct,
+            async () =>
+            {
         var can = await _canArchive.ExecuteAsync(new CanArchiveBomRequest(req.FilePath), ct);
         if (!can.IsSuccess || can.Data is null)
             return Result<ArchiveBomResponse>.Fail(can.Error!.Code, can.Error.Message);
@@ -85,6 +92,7 @@ public sealed class ArchiveBomUseCase
         }
 
         return Result<ArchiveBomResponse>.Ok(new ArchiveBomResponse(archived.Data));
-    }
+            },
+            treatAsBlocked: static c => c is ErrorCodes.BOM_ARCHIVE_VERSION_EXISTS or ErrorCodes.BOM_FILE_LOCKED);
 }
 

@@ -1,16 +1,21 @@
 using Dapper;
+using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Application.Logging;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Infrastructure.Sqlite;
 
 public sealed class SqliteBomArchiveRepository : IBomArchiveRepository
 {
     private readonly SqliteConnection _connection;
+    private readonly ILogger<SqliteBomArchiveRepository> _logger;
 
-    public SqliteBomArchiveRepository(SqliteConnection connection)
+    public SqliteBomArchiveRepository(SqliteConnection connection, ILogger<SqliteBomArchiveRepository>? logger = null)
     {
         _connection = connection;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteBomArchiveRepository>.Instance;
     }
 
     public Task<bool> ExistsAsync(string finishedCode, string version, CancellationToken ct = default)
@@ -32,10 +37,18 @@ public sealed class SqliteBomArchiveRepository : IBomArchiveRepository
                   INSERT INTO bom_archive(finished_code, version, file_path)
                   VALUES (@finishedCode, @version, @filePath);
                   """;
-        await _connection.ExecuteAsync(new CommandDefinition(
-            sql,
-            new { finishedCode, version, filePath },
-            cancellationToken: ct));
+        try
+        {
+            await _connection.ExecuteAsync(new CommandDefinition(
+                sql,
+                new { finishedCode, version, filePath },
+                cancellationToken: ct));
+        }
+        catch (Exception ex)
+        {
+            McsLoggingExtensions.LogException(_logger, ex, McsActions.BomArchiveService, ErrorCodes.INTERNAL_ERROR);
+            throw;
+        }
     }
 
     public async Task UpdateAsync(string finishedCode, string version, string filePath, CancellationToken ct = default)
@@ -47,10 +60,18 @@ public sealed class SqliteBomArchiveRepository : IBomArchiveRepository
                   WHERE finished_code = @finishedCode
                     AND version = @version;
                   """;
-        await _connection.ExecuteAsync(new CommandDefinition(
-            sql,
-            new { finishedCode, version, filePath },
-            cancellationToken: ct));
+        try
+        {
+            await _connection.ExecuteAsync(new CommandDefinition(
+                sql,
+                new { finishedCode, version, filePath },
+                cancellationToken: ct));
+        }
+        catch (Exception ex)
+        {
+            McsLoggingExtensions.LogException(_logger, ex, McsActions.BomArchiveService, ErrorCodes.INTERNAL_ERROR);
+            throw;
+        }
     }
 
     public async Task<BomArchiveRecord?> GetAsync(string finishedCode, string version, CancellationToken ct = default)

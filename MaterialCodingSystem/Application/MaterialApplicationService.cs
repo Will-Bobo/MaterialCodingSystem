@@ -1,9 +1,11 @@
 using System.IO;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Application.Logging;
 using MaterialCodingSystem.Domain.Entities;
 using MaterialCodingSystem.Domain.Services;
 using MaterialCodingSystem.Domain.ValueObjects;
+using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Application;
 
@@ -14,19 +16,24 @@ public sealed class MaterialApplicationService
     private readonly IUnitOfWork _uow;
     private readonly IMaterialRepository _repo;
     private readonly IExcelMaterialExporter? _excelExporter;
+    private readonly ILogger<MaterialApplicationService> _logger;
 
     public MaterialApplicationService(
         IUnitOfWork uow,
         IMaterialRepository repo,
-        IExcelMaterialExporter? excelExporter = null)
+        IExcelMaterialExporter? excelExporter = null,
+        ILogger<MaterialApplicationService>? logger = null)
     {
         _uow = uow;
         _repo = repo;
         _excelExporter = excelExporter;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<MaterialApplicationService>.Instance;
     }
 
     public Task<Result<CreateCategoryResponse>> CreateCategory(CreateCategoryRequest req, CancellationToken ct = default)
-        => _uow.ExecuteAsync(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialCreateCategory,
+            string.IsNullOrWhiteSpace(req.Code) ? null : req.Code.Trim().ToUpperInvariant(), ct,
+            async () => await _uow.ExecuteAsync(async () =>
         {
             if (string.IsNullOrWhiteSpace(req.Code))
             {
@@ -65,18 +72,22 @@ public sealed class MaterialApplicationService
             }
 
             return Result<CreateCategoryResponse>.Ok(new CreateCategoryResponse(code, name));
-        }, ct);
+        }, ct));
 
     public Task<Result<IReadOnlyList<CategoryDto>>> ListCategories(CancellationToken ct = default)
-        => _uow.ExecuteAsync(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialListCategories, null, ct,
+            async () => await _uow.ExecuteAsync(async () =>
         {
             var rows = await _repo.ListCategoriesAsync(ct);
             var items = rows.Select(x => new CategoryDto(x.Code, x.Name)).ToList();
             return Result<IReadOnlyList<CategoryDto>>.Ok(items);
-        }, ct);
+        }, ct),
+            r => r.IsSuccess && r.Data is not null ? ("count", r.Data.Count) : null);
 
     public Task<Result<int>> ResolveGroupIdByItemCode(string code, CancellationToken ct = default)
-        => _uow.ExecuteAsync(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialResolveGroupIdByItemCode,
+            string.IsNullOrWhiteSpace(code) ? null : code.Trim(), ct,
+            async () => await _uow.ExecuteAsync(async () =>
         {
             if (string.IsNullOrWhiteSpace(code))
             {
@@ -90,10 +101,12 @@ public sealed class MaterialApplicationService
             }
 
             return Result<int>.Ok(groupId.Value);
-        }, ct);
+        }, ct));
 
     public Task<Result<GroupInfoDto>> GetGroupInfo(int groupId, CancellationToken ct = default)
-        => _uow.ExecuteAsync(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialGetGroupInfo,
+            groupId > 0 ? groupId.ToString() : null, ct,
+            async () => await _uow.ExecuteAsync(async () =>
         {
             if (groupId <= 0)
             {
@@ -132,14 +145,16 @@ public sealed class MaterialApplicationService
                 ExistingSuffixes: existing,
                 NextSuffix: nextSuffix
             ));
-        }, ct);
+        }, ct));
 
     /// <summary>
     /// 下一组流水号建议值 = max(serial_no)+1（无组时为 1）。仅查询与 +1，不插入组。
     /// 供 PRD Validation 等经 Application 入口使用。
     /// </summary>
     public Task<Result<int>> AllocateNextGroupSerial(string categoryCodeRaw, CancellationToken ct = default)
-        => _uow.ExecuteAsync(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialAllocateNextGroupSerial,
+            string.IsNullOrWhiteSpace(categoryCodeRaw) ? null : categoryCodeRaw.Trim(), ct,
+            async () => await _uow.ExecuteAsync(async () =>
         {
             if (string.IsNullOrWhiteSpace(categoryCodeRaw))
             {
@@ -158,10 +173,13 @@ public sealed class MaterialApplicationService
 
             var max = await _repo.GetMaxSerialNoAsync(categoryCode, ct);
             return Result<int>.Ok(max + 1);
-        }, ct);
+        }, ct),
+            r => r.IsSuccess ? ("allocated_serial", r.Data) : null);
 
     public Task<Result<CreateMaterialItemAResponse>> CreateMaterialItemA(CreateMaterialItemARequest req, CancellationToken ct = default)
-        => ExecuteWithRetry(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialCreateMaterialItemA,
+            string.IsNullOrWhiteSpace(req.CategoryCode) ? null : req.CategoryCode.Trim(), ct,
+            () => ExecuteWithRetry(async () =>
         {
             if (string.IsNullOrWhiteSpace(req.Description))
             {
@@ -257,10 +275,12 @@ public sealed class MaterialApplicationService
                 Spec: itemA.Spec.Value,
                 SpecNormalized: itemA.SpecNormalized.Value
             ));
-        }, ct, retryConstraint: IMaterialRepository.CONSTRAINT_GROUP_CATEGORY_SERIAL);
+        }, ct, retryConstraint: IMaterialRepository.CONSTRAINT_GROUP_CATEGORY_SERIAL));
 
     public Task<Result<CreateMaterialItemManualResponse>> CreateMaterialItemManual(CreateMaterialItemManualRequest req, CancellationToken ct = default)
-        => _uow.ExecuteAsync(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialCreateMaterialItemManual,
+            string.IsNullOrWhiteSpace(req.CategoryCode) ? null : req.CategoryCode.Trim().ToUpperInvariant(), ct,
+            async () => await _uow.ExecuteAsync(async () =>
         {
             if (string.IsNullOrWhiteSpace(req.Description))
             {
@@ -385,10 +405,12 @@ public sealed class MaterialApplicationService
                 Spec: spec.Value,
                 SpecNormalized: normalized.Value
             ));
-        }, ct);
+        }, ct));
 
     public Task<Result<CreateReplacementResponse>> CreateReplacement(CreateReplacementRequest req, CancellationToken ct = default)
-        => ExecuteWithRetry(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialCreateReplacement,
+            req.GroupId > 0 ? $"group_{req.GroupId}" : null, ct,
+            () => ExecuteWithRetry(async () =>
         {
             var validationErrors = new Dictionary<string, string>();
             if (string.IsNullOrWhiteSpace(req.Description))
@@ -524,10 +546,12 @@ public sealed class MaterialApplicationService
                 Spec: item.Spec.Value,
                 SpecNormalized: item.SpecNormalized.Value
             ));
-        }, ct, retryConstraint: IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX);
+        }, ct, retryConstraint: IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX));
 
     public Task<Result<CreateReplacementResponse>> CreateReplacementByCode(CreateReplacementByCodeRequest req, CancellationToken ct = default)
-        => ExecuteWithRetry(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialCreateReplacementByCode,
+            string.IsNullOrWhiteSpace(req.BaseMaterialCode) ? null : req.BaseMaterialCode.Trim(), ct,
+            () => ExecuteWithRetry(async () =>
         {
             var validationErrors = new Dictionary<string, string>();
             if (string.IsNullOrWhiteSpace(req.BaseMaterialCode))
@@ -673,7 +697,7 @@ public sealed class MaterialApplicationService
                 Spec: item.Spec.Value,
                 SpecNormalized: item.SpecNormalized.Value
             ));
-        }, ct, retryConstraint: IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX);
+        }, ct, retryConstraint: IMaterialRepository.CONSTRAINT_ITEM_GROUP_SUFFIX));
 
     private async Task<Result<T>> ExecuteWithRetry<T>(
         Func<Task<Result<T>>> action,
@@ -708,7 +732,9 @@ public sealed class MaterialApplicationService
     }
 
     public Task<Result<DeprecateResponse>> DeprecateMaterialItem(DeprecateRequest req, CancellationToken ct = default)
-        => _uow.ExecuteAsync(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialDeprecateMaterialItem,
+            string.IsNullOrWhiteSpace(req.Code) ? null : req.Code.Trim(), ct,
+            async () => await _uow.ExecuteAsync(async () =>
         {
             if (string.IsNullOrWhiteSpace(req.Code))
             {
@@ -729,10 +755,12 @@ public sealed class MaterialApplicationService
 
             await _repo.DeprecateByCodeAsync(req.Code, ct);
             return Result<DeprecateResponse>.Ok(new DeprecateResponse(req.Code, 0));
-        }, ct);
+        }, ct));
 
     public Task<Result<PagedResult<MaterialItemSummary>>> SearchByCode(SearchQuery query, CancellationToken ct = default)
-        => _uow.ExecuteAsync(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialSearchByCode,
+            $"{query.CategoryCode ?? ""}|{query.CodeKeyword ?? ""}".Trim('|'), ct,
+            async () => await _uow.ExecuteAsync(async () =>
         {
             if (string.IsNullOrWhiteSpace(query.CodeKeyword))
             {
@@ -745,10 +773,13 @@ public sealed class MaterialApplicationService
             }
 
             return Result<PagedResult<MaterialItemSummary>>.Ok(await _repo.SearchByCodeAsync(query, ct));
-        }, ct);
+        }, ct),
+            r => r.IsSuccess && r.Data is not null ? ("page_size", query.Limit) : null);
 
     public Task<Result<PagedResult<MaterialItemSpecHit>>> SearchBySpec(SearchQuery query, CancellationToken ct = default)
-        => _uow.ExecuteAsync(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialSearchBySpec,
+            query.CategoryCode?.Trim(), ct,
+            async () => await _uow.ExecuteAsync(async () =>
         {
             if (string.IsNullOrWhiteSpace(query.CategoryCode))
             {
@@ -763,7 +794,8 @@ public sealed class MaterialApplicationService
             // PRD V1：固定 LIMIT 20
             var fixedQuery = query with { Limit = 20, Offset = 0 };
             return Result<PagedResult<MaterialItemSpecHit>>.Ok(await _repo.SearchBySpecAsync(fixedQuery, ct));
-        }, ct);
+        }, ct),
+            r => r.IsSuccess ? ("page_size", 20) : null);
 
     /// <summary>
     /// CreateMaterial 候选收敛：仅基于 spec（规格号）模糊匹配；固定 status=1；不使用 spec_normalized。
@@ -774,7 +806,9 @@ public sealed class MaterialApplicationService
         string keyword,
         int limit = 20,
         CancellationToken ct = default)
-        => _uow.ExecuteAsync(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialSearchCandidatesBySpecOnly,
+            categoryCode?.Trim(), ct,
+            async () => await _uow.ExecuteAsync(async () =>
         {
             if (string.IsNullOrWhiteSpace(categoryCode))
             {
@@ -789,7 +823,12 @@ public sealed class MaterialApplicationService
             var fixedLimit = Math.Min(limit <= 0 ? 20 : limit, 20);
             return Result<PagedResult<MaterialItemSpecHit>>.Ok(
                 await _repo.SearchCandidatesBySpecOnlyAsync(categoryCode.Trim(), keyword.Trim(), fixedLimit, ct));
-        }, ct);
+        }, ct),
+            r =>
+            {
+                var fixedLimit = Math.Min(limit <= 0 ? 20 : limit, 20);
+                return r.IsSuccess ? ("page_size", fixedLimit) : null;
+            });
 
     public Task<Result<PagedResult<MaterialItemSpecHit>>> SearchBySpecAllAsync(
         string keyword,
@@ -797,7 +836,9 @@ public sealed class MaterialApplicationService
         int limit = 20,
         CancellationToken ct = default
     )
-        => _uow.ExecuteAsync(async () =>
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialSearchBySpecAll,
+            keyword?.Trim(), ct,
+            async () => await _uow.ExecuteAsync(async () =>
         {
             if (string.IsNullOrWhiteSpace(keyword))
             {
@@ -807,23 +848,32 @@ public sealed class MaterialApplicationService
             var fixedLimit = Math.Min(limit <= 0 ? 20 : limit, 20);
             return Result<PagedResult<MaterialItemSpecHit>>.Ok(
                 await _repo.SearchBySpecAllAsync(keyword.Trim(), includeDeprecated, fixedLimit, ct));
-        }, ct);
+        }, ct),
+            r =>
+            {
+                var fixedLimit = Math.Min(limit <= 0 ? 20 : limit, 20);
+                return r.IsSuccess ? ("page_size", fixedLimit) : null;
+            });
 
     public Task<Result<ExportMaterialsResponse>> ExportActiveMaterials(string filePath, CancellationToken ct = default)
     {
+        return McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.MaterialExportActiveMaterials,
+            McsLog.FileNameForLog(filePath), ct,
+            async () =>
+        {
         if (_excelExporter is null)
         {
-            return Task.FromResult(Result<ExportMaterialsResponse>.Fail(
-                ErrorCodes.INTERNAL_ERROR, "Excel export is not configured."));
+            return Result<ExportMaterialsResponse>.Fail(
+                ErrorCodes.INTERNAL_ERROR, "Excel export is not configured.");
         }
 
         if (string.IsNullOrWhiteSpace(filePath))
         {
-            return Task.FromResult(Result<ExportMaterialsResponse>.Fail(
-                ErrorCodes.VALIDATION_ERROR, "file path is required."));
+            return Result<ExportMaterialsResponse>.Fail(
+                ErrorCodes.VALIDATION_ERROR, "file path is required.");
         }
 
-        return _uow.ExecuteAsync(async () =>
+        return await _uow.ExecuteAsync(async () =>
         {
             // PRD V1.3：Sheet1=全量（含废弃）；分类 Sheet 同样包含全部数据
             var rows = await _repo.ListAllItemsForExportAsync(ct);
@@ -845,6 +895,8 @@ public sealed class MaterialApplicationService
                 RowCount: rows.Count,
                 SheetCount: sheetCount));
         }, ct);
+        },
+            r => r.IsSuccess && r.Data is not null ? ("exported_row_count", r.Data.RowCount) : null);
     }
 
     /// <summary>目标文件被其他进程占用（如 Excel 已打开），ClosedXML 保存时会失败。</summary>

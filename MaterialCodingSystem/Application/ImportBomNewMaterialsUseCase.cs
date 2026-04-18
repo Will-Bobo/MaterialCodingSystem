@@ -1,4 +1,5 @@
 using MaterialCodingSystem.Application.Contracts;
+using MaterialCodingSystem.Application.Logging;
 using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Application;
@@ -25,16 +26,18 @@ public sealed class ImportBomNewMaterialsUseCase
         AnalyzeBomUseCase analyze,
         MaterialApplicationService materials,
         BomImportInProgressGate gate,
-        ILogger<ImportBomNewMaterialsUseCase> logger)
+        ILogger<ImportBomNewMaterialsUseCase>? logger = null)
     {
         _analyze = analyze;
         _materials = materials;
         _gate = gate;
-        _logger = logger;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ImportBomNewMaterialsUseCase>.Instance;
     }
 
-    public async Task<Result<ImportBomNewMaterialsResponse>> ExecuteAsync(ImportBomNewMaterialsRequest req, CancellationToken ct = default)
-    {
+    public Task<Result<ImportBomNewMaterialsResponse>> ExecuteAsync(ImportBomNewMaterialsRequest req, CancellationToken ct = default)
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.BomImportNewMaterials, McsLog.FileNameForLog(req.FilePath), ct,
+            async () =>
+            {
         // 1) analyze current state (Phase1 engine)
         var before = await _analyze.ExecuteAsync(new AnalyzeBomRequest(req.FilePath), ct);
         if (!before.IsSuccess || before.Data is null)
@@ -42,10 +45,7 @@ public sealed class ImportBomNewMaterialsUseCase
 
         var importKey = $"{before.Data.FinishedCode}||{before.Data.Version}";
         if (!_gate.TryEnter(importKey, out var sem))
-        {
-            _logger.LogInformation("BOM import in progress. finished_code={finishedCode} version={version}", before.Data.FinishedCode, before.Data.Version);
             return Result<ImportBomNewMaterialsResponse>.Fail(ErrorCodes.BOM_IMPORT_IN_PROGRESS, "import in progress.");
-        }
 
         try
         {
@@ -148,7 +148,9 @@ public sealed class ImportBomNewMaterialsUseCase
         {
             _gate.Exit(importKey, sem);
         }
-    }
+            },
+            r => r.IsSuccess && r.Data is not null ? ("inserted_count", r.Data.SuccessCount) : null,
+            c => c == ErrorCodes.BOM_IMPORT_IN_PROGRESS);
 
     private static string MapImportFailureToReason(string errorCode, string? errorMessage)
         => errorCode switch

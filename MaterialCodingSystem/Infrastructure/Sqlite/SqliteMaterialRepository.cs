@@ -1,22 +1,28 @@
+using System.IO;
+using System.Runtime.CompilerServices;
 using Dapper;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Application.Logging;
 using MaterialCodingSystem.Domain.Entities;
 using MaterialCodingSystem.Domain.ValueObjects;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Infrastructure.Sqlite;
 
 public sealed class SqliteMaterialRepository : IMaterialRepository
 {
     private readonly SqliteConnection _connection;
+    private readonly ILogger<SqliteMaterialRepository> _logger;
 
     /// <summary>
     /// MUST be used within <see cref="SqliteUnitOfWork"/> for all write operations (INSERT/UPDATE/DELETE).
     /// </summary>
-    public SqliteMaterialRepository(SqliteConnection connection)
+    public SqliteMaterialRepository(SqliteConnection connection, ILogger<SqliteMaterialRepository>? logger = null)
     {
         _connection = connection;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteMaterialRepository>.Instance;
     }
 
     private SqliteTransaction? Tx => AmbientSqliteContext.CurrentTransaction;
@@ -77,108 +83,118 @@ public sealed class SqliteMaterialRepository : IMaterialRepository
         }
     }
 
-    public async Task<bool> CategoryExistsAsync(CategoryCode categoryCode, CancellationToken ct = default)
-    {
-        var sql = "SELECT 1 FROM category WHERE code = @code LIMIT 1;";
-        var found = await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
-            sql, new { code = categoryCode.Value }, transaction: Tx, cancellationToken: ct));
-        return found is not null;
-    }
-
-    public async Task<string?> GetCategoryNameByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default)
-    {
-        var sql = "SELECT name FROM category WHERE code = @code LIMIT 1;";
-        return await _connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-            sql, new { code = categoryCode.Value }, transaction: Tx, cancellationToken: ct));
-    }
-
-    public async Task<int?> GetCategoryIdByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default)
-    {
-        var sql = "SELECT id FROM category WHERE code = @code LIMIT 1;";
-        return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
-            sql, new { code = categoryCode.Value }, transaction: Tx, cancellationToken: ct));
-    }
-
-    public async Task InsertCategoryAsync(string code, string name, CancellationToken ct = default)
-    {
-        EnsureWriteTransaction();
-        var sql = "INSERT INTO category(code, name) VALUES (@code, @name);";
-        try
+    public Task<bool> CategoryExistsAsync(CategoryCode categoryCode, CancellationToken ct = default) =>
+        ExecAsync(async () =>
         {
-            await _connection.ExecuteAsync(new CommandDefinition(
-                sql, new { code, name }, transaction: Tx, cancellationToken: ct));
-        }
-        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+            var sql = "SELECT 1 FROM category WHERE code = @code LIMIT 1;";
+            var found = await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
+                sql, new { code = categoryCode.Value }, transaction: Tx, cancellationToken: ct));
+            return found is not null;
+        });
+
+    public Task<string?> GetCategoryNameByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default) =>
+        ExecAsync(async () =>
         {
-            // SQLite 的错误信息里通常会包含字段名；Application 侧再做一次细分映射
-            throw new DbConstraintViolationException("UNIQUE(category)", ex.Message);
-        }
-    }
+            var sql = "SELECT name FROM category WHERE code = @code LIMIT 1;";
+            return await _connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+                sql, new { code = categoryCode.Value }, transaction: Tx, cancellationToken: ct));
+        });
 
-    public async Task<IReadOnlyList<(string Code, string Name)>> ListCategoriesAsync(CancellationToken ct = default)
-    {
-        var sql = "SELECT code AS Code, name AS Name FROM category ORDER BY code;";
-        var rows = await _connection.QueryAsync<(string Code, string Name)>(new CommandDefinition(
-            sql, transaction: Tx, cancellationToken: ct));
-        return rows.ToList();
-    }
+    public Task<int?> GetCategoryIdByCodeAsync(CategoryCode categoryCode, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            var sql = "SELECT id FROM category WHERE code = @code LIMIT 1;";
+            return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
+                sql, new { code = categoryCode.Value }, transaction: Tx, cancellationToken: ct));
+        });
 
-    public async Task<bool> SpecExistsAsync(CategoryCode categoryCode, Spec spec, CancellationToken ct = default)
-    {
-        // PRD：spec 仅对启用态(status=1)唯一；历史废弃不应触发 SPEC_DUPLICATE
-        var sql = "SELECT 1 FROM material_item WHERE category_code = @categoryCode AND spec = @spec AND status = 1 LIMIT 1;";
-        var found = await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
-            sql, new { categoryCode = categoryCode.Value, spec = spec.Value }, transaction: Tx, cancellationToken: ct));
-        return found is not null;
-    }
+    public Task InsertCategoryAsync(string code, string name, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            EnsureWriteTransaction();
+            var sql = "INSERT INTO category(code, name) VALUES (@code, @name);";
+            try
+            {
+                await _connection.ExecuteAsync(new CommandDefinition(
+                    sql, new { code, name }, transaction: Tx, cancellationToken: ct));
+            }
+            catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+            {
+                // SQLite 的错误信息里通常会包含字段名；Application 侧再做一次细分映射
+                throw new DbConstraintViolationException("UNIQUE(category)", ex.Message);
+            }
+        });
 
-    public async Task<int> GetMaxSerialNoAsync(CategoryCode categoryCode, CancellationToken ct = default)
-    {
-        var sql = @"
+    public Task<IReadOnlyList<(string Code, string Name)>> ListCategoriesAsync(CancellationToken ct = default) =>
+        ExecAsync<IReadOnlyList<(string Code, string Name)>>(async () =>
+        {
+            var sql = "SELECT code AS Code, name AS Name FROM category ORDER BY code;";
+            var rows = await _connection.QueryAsync<(string Code, string Name)>(new CommandDefinition(
+                sql, transaction: Tx, cancellationToken: ct));
+            return rows.ToList();
+        });
+
+    public Task<bool> SpecExistsAsync(CategoryCode categoryCode, Spec spec, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            // PRD：spec 仅对启用态(status=1)唯一；历史废弃不应触发 SPEC_DUPLICATE
+            var sql = "SELECT 1 FROM material_item WHERE category_code = @categoryCode AND spec = @spec AND status = 1 LIMIT 1;";
+            var found = await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
+                sql, new { categoryCode = categoryCode.Value, spec = spec.Value }, transaction: Tx, cancellationToken: ct));
+            return found is not null;
+        });
+
+    public Task<int> GetMaxSerialNoAsync(CategoryCode categoryCode, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            var sql = @"
 SELECT MAX(serial_no)
 FROM material_group
 WHERE category_code = @categoryCode;";
-        return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
-            sql, new { categoryCode = categoryCode.Value }, transaction: Tx, cancellationToken: ct)) ?? 0;
-    }
+            return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
+                sql, new { categoryCode = categoryCode.Value }, transaction: Tx, cancellationToken: ct)) ?? 0;
+        });
 
-    public async Task<int> InsertGroupAsync(CategoryCode categoryCode, int serialNo, CancellationToken ct = default)
-    {
-        EnsureWriteTransaction();
-        var sql = @"
+    public Task<int> InsertGroupAsync(CategoryCode categoryCode, int serialNo, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            EnsureWriteTransaction();
+            var sql = @"
 INSERT INTO material_group(category_id, category_code, serial_no)
 VALUES ((SELECT id FROM category WHERE code=@categoryCode), @categoryCode, @serialNo);
 SELECT last_insert_rowid();";
 
-        try
-        {
-            var id = await _connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                sql, new { categoryCode = categoryCode.Value, serialNo }, transaction: Tx, cancellationToken: ct));
-            return (int)id;
-        }
-        catch (SqliteException ex) when (ex.SqliteErrorCode == 19) // constraint violation
-        {
-            var mapped = MapSqliteUniqueConstraintViolation(ex.Message);
-            throw new DbConstraintViolationException(mapped, ex.Message);
-        }
-    }
+            try
+            {
+                var id = await _connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    sql, new { categoryCode = categoryCode.Value, serialNo }, transaction: Tx, cancellationToken: ct));
+                return (int)id;
+            }
+            catch (SqliteException ex) when (ex.SqliteErrorCode == 19) // constraint violation
+            {
+                var mapped = MapSqliteUniqueConstraintViolation(ex.Message);
+                throw new DbConstraintViolationException(mapped, ex.Message);
+            }
+        });
 
-    public async Task<int?> GetGroupIdByCategoryAndSerialNoAsync(int categoryId, int serialNo, CancellationToken ct = default)
-    {
-        var sql = """
-                  SELECT id
-                  FROM material_group
-                  WHERE category_id = @categoryId AND serial_no = @serialNo
-                  LIMIT 1;
-                  """;
-        return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
-            sql, new { categoryId, serialNo }, transaction: Tx, cancellationToken: ct));
-    }
+    public Task<int?> GetGroupIdByCategoryAndSerialNoAsync(int categoryId, int serialNo, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            var sql = """
+                      SELECT id
+                      FROM material_group
+                      WHERE category_id = @categoryId AND serial_no = @serialNo
+                      LIMIT 1;
+                      """;
+            return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
+                sql, new { categoryId, serialNo }, transaction: Tx, cancellationToken: ct));
+        });
 
-    public async Task InsertItemAsync(int groupId, MaterialItem item, CancellationToken ct = default)
-    {
-        EnsureWriteTransaction();
-        var sql = @"
+    public Task InsertItemAsync(int groupId, MaterialItem item, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            EnsureWriteTransaction();
+            var sql = @"
 INSERT INTO material_item(
   group_id, category_id, category_code,
   code, suffix, name, display_name, description, spec, spec_normalized, brand,
@@ -194,128 +210,135 @@ FROM material_group mg
 WHERE mg.id = @groupId;
 ";
 
-        try
-        {
-            var rows = await _connection.ExecuteAsync(new CommandDefinition(
-                sql,
-                new
-                {
-                    groupId,
-                    code = item.Code,
-                    suffix = item.Suffix.Value.ToString(),
-                    name = item.Name,
-                    displayName = item.DisplayName,
-                    description = item.Description,
-                    spec = item.Spec.Value,
-                    specNormalized = item.SpecNormalized.Value,
-                    brand = item.Brand
-                },
-                transaction: Tx,
-                cancellationToken: ct
-            ));
-
-            if (rows != 1)
+            try
             {
-                throw new DbConstraintViolationException("NOT_FOUND", "group not found for insert item.");
-            }
-        }
-        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
-        {
-            var mapped = MapSqliteUniqueConstraintViolation(ex.Message);
-            throw new DbConstraintViolationException(mapped, ex.Message);
-        }
-    }
+                var rows = await _connection.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        groupId,
+                        code = item.Code,
+                        suffix = item.Suffix.Value.ToString(),
+                        name = item.Name,
+                        displayName = item.DisplayName,
+                        description = item.Description,
+                        spec = item.Spec.Value,
+                        specNormalized = item.SpecNormalized.Value,
+                        brand = item.Brand
+                    },
+                    transaction: Tx,
+                    cancellationToken: ct
+                ));
 
-    public async Task<MaterialGroupSnapshot?> GetGroupSnapshotAsync(int groupId, CancellationToken ct = default)
-    {
-        var groupSql = @"
+                if (rows != 1)
+                {
+                    throw new DbConstraintViolationException("NOT_FOUND", "group not found for insert item.");
+                }
+            }
+            catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+            {
+                var mapped = MapSqliteUniqueConstraintViolation(ex.Message);
+                throw new DbConstraintViolationException(mapped, ex.Message);
+            }
+        });
+
+    public Task<MaterialGroupSnapshot?> GetGroupSnapshotAsync(int groupId, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            var groupSql = @"
 SELECT mg.id AS GroupId, mg.category_code AS CategoryCode, mg.serial_no AS SerialNo
 FROM material_group mg
 WHERE mg.id = @groupId;";
 
-        var group = await _connection.QuerySingleOrDefaultAsync<dynamic>(new CommandDefinition(
-            groupSql, new { groupId }, transaction: Tx, cancellationToken: ct));
+            var group = await _connection.QuerySingleOrDefaultAsync<dynamic>(new CommandDefinition(
+                groupSql, new { groupId }, transaction: Tx, cancellationToken: ct));
 
-        if (group is null) return null;
+            if (group is null) return null;
 
-        var suffixSql = "SELECT suffix FROM material_item WHERE group_id = @groupId ORDER BY suffix;";
-        var suffixStrings = (await _connection.QueryAsync<string>(new CommandDefinition(
-            suffixSql, new { groupId }, transaction: Tx, cancellationToken: ct))).ToArray();
+            var suffixSql = "SELECT suffix FROM material_item WHERE group_id = @groupId ORDER BY suffix;";
+            var suffixStrings = (await _connection.QueryAsync<string>(new CommandDefinition(
+                suffixSql, new { groupId }, transaction: Tx, cancellationToken: ct))).ToArray();
 
-        var suffixes = suffixStrings
-            .Where(s => !string.IsNullOrEmpty(s))
-            .Select(s => s[0])
-            .ToArray();
+            var suffixes = suffixStrings
+                .Where(s => !string.IsNullOrEmpty(s))
+                .Select(s => s[0])
+                .ToArray();
 
-        return new MaterialGroupSnapshot(
-            GroupId: (int)group.GroupId,
-            CategoryCode: new CategoryCode((string)group.CategoryCode),
-            SerialNo: (int)group.SerialNo,
-            ExistingSuffixes: suffixes
-        );
-    }
+            return new MaterialGroupSnapshot(
+                GroupId: (int)group.GroupId,
+                CategoryCode: new CategoryCode((string)group.CategoryCode),
+                SerialNo: (int)group.SerialNo,
+                ExistingSuffixes: suffixes
+            );
+        });
 
-    public async Task<MaterialItemStatusSnapshot?> GetBaseItemStatusByGroupIdAsync(int groupId, CancellationToken ct = default)
-    {
-        var sql = "SELECT code AS Code, status AS Status FROM material_item WHERE group_id=@groupId AND suffix='A' LIMIT 1;";
-        var row = await _connection.QuerySingleOrDefaultAsync<dynamic>(new CommandDefinition(
-            sql, new { groupId }, transaction: Tx, cancellationToken: ct));
-        if (row is null) return null;
-        return new MaterialItemStatusSnapshot((string)row.Code, (int)row.Status);
-    }
-
-    public async Task<MaterialItemStatusSnapshot?> GetItemStatusByCodeAsync(string code, CancellationToken ct = default)
-    {
-        var sql = "SELECT code AS Code, status AS Status FROM material_item WHERE code=@code LIMIT 1;";
-        var row = await _connection.QuerySingleOrDefaultAsync<dynamic>(new CommandDefinition(
-            sql, new { code }, transaction: Tx, cancellationToken: ct));
-        if (row is null) return null;
-        return new MaterialItemStatusSnapshot((string)row.Code, (int)row.Status);
-    }
-
-    public async Task<MaterialItemCodeSpecSnapshot?> GetCodeSpecByCodeAsync(string code, CancellationToken ct = default)
-    {
-        var sql = "SELECT code AS Code, spec AS Spec, status AS Status FROM material_item WHERE code=@code LIMIT 1;";
-        var row = await _connection.QuerySingleOrDefaultAsync<dynamic>(new CommandDefinition(
-            sql, new { code }, transaction: Tx, cancellationToken: ct));
-        if (row is null) return null;
-        return new MaterialItemCodeSpecSnapshot((string)row.Code, (string)row.Spec, (int)row.Status);
-    }
-
-    public async Task<int?> GetGroupIdByItemCodeAsync(string code, CancellationToken ct = default)
-    {
-        var sql = "SELECT group_id FROM material_item WHERE code=@code LIMIT 1;";
-        return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
-            sql, new { code }, transaction: Tx, cancellationToken: ct));
-    }
-
-    public async Task DeprecateByCodeAsync(string code, CancellationToken ct = default)
-    {
-        EnsureWriteTransaction();
-        var sql = "UPDATE material_item SET status=0 WHERE code=@code;";
-        var rows = await _connection.ExecuteAsync(new CommandDefinition(
-            sql, new { code }, transaction: Tx, cancellationToken: ct));
-        if (rows != 1)
+    public Task<MaterialItemStatusSnapshot?> GetBaseItemStatusByGroupIdAsync(int groupId, CancellationToken ct = default) =>
+        ExecAsync(async () =>
         {
-            throw new DbConstraintViolationException("NOT_FOUND", "item not found for deprecate.");
-        }
-    }
+            var sql = "SELECT code AS Code, status AS Status FROM material_item WHERE group_id=@groupId AND suffix='A' LIMIT 1;";
+            var row = await _connection.QuerySingleOrDefaultAsync<dynamic>(new CommandDefinition(
+                sql, new { groupId }, transaction: Tx, cancellationToken: ct));
+            if (row is null) return null;
+            return new MaterialItemStatusSnapshot((string)row.Code, (int)row.Status);
+        });
 
-    public async Task<PagedResult<MaterialItemSummary>> SearchByCodeAsync(SearchQuery query, CancellationToken ct = default)
-    {
-        var limit = query.Limit;
-        var offset = query.Offset;
-        var includeDeprecated = query.IncludeDeprecated;
-
-        var prefixPattern = (query.CodeKeyword ?? "") + "%";
-        var fuzzyPattern = "%" + (query.CodeKeyword ?? "") + "%";
-
-        var statusFilter = includeDeprecated ? "" : "AND status = 1";
-        var categoryFilter = string.IsNullOrWhiteSpace(query.CategoryCode) ? "" : "AND category_code = @categoryCode";
-
-        async Task<List<MaterialItemSummary>> QueryAsync(string pattern)
+    public Task<MaterialItemStatusSnapshot?> GetItemStatusByCodeAsync(string code, CancellationToken ct = default) =>
+        ExecAsync(async () =>
         {
-            var sql = $@"
+            var sql = "SELECT code AS Code, status AS Status FROM material_item WHERE code=@code LIMIT 1;";
+            var row = await _connection.QuerySingleOrDefaultAsync<dynamic>(new CommandDefinition(
+                sql, new { code }, transaction: Tx, cancellationToken: ct));
+            if (row is null) return null;
+            return new MaterialItemStatusSnapshot((string)row.Code, (int)row.Status);
+        });
+
+    public Task<MaterialItemCodeSpecSnapshot?> GetCodeSpecByCodeAsync(string code, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            var sql = "SELECT code AS Code, spec AS Spec, status AS Status FROM material_item WHERE code=@code LIMIT 1;";
+            var row = await _connection.QuerySingleOrDefaultAsync<dynamic>(new CommandDefinition(
+                sql, new { code }, transaction: Tx, cancellationToken: ct));
+            if (row is null) return null;
+            return new MaterialItemCodeSpecSnapshot((string)row.Code, (string)row.Spec, (int)row.Status);
+        });
+
+    public Task<int?> GetGroupIdByItemCodeAsync(string code, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            var sql = "SELECT group_id FROM material_item WHERE code=@code LIMIT 1;";
+            return await _connection.ExecuteScalarAsync<int?>(new CommandDefinition(
+                sql, new { code }, transaction: Tx, cancellationToken: ct));
+        });
+
+    public Task DeprecateByCodeAsync(string code, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            EnsureWriteTransaction();
+            var sql = "UPDATE material_item SET status=0 WHERE code=@code;";
+            var rows = await _connection.ExecuteAsync(new CommandDefinition(
+                sql, new { code }, transaction: Tx, cancellationToken: ct));
+            if (rows != 1)
+            {
+                throw new DbConstraintViolationException("NOT_FOUND", "item not found for deprecate.");
+            }
+        });
+
+    public Task<PagedResult<MaterialItemSummary>> SearchByCodeAsync(SearchQuery query, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            var limit = query.Limit;
+            var offset = query.Offset;
+            var includeDeprecated = query.IncludeDeprecated;
+
+            var prefixPattern = (query.CodeKeyword ?? "") + "%";
+            var fuzzyPattern = "%" + (query.CodeKeyword ?? "") + "%";
+
+            var statusFilter = includeDeprecated ? "" : "AND status = 1";
+            var categoryFilter = string.IsNullOrWhiteSpace(query.CategoryCode) ? "" : "AND category_code = @categoryCode";
+
+            async Task<List<MaterialItemSummary>> QueryAsync(string pattern)
+            {
+                var sql = $@"
 SELECT code AS Code, name AS Name, display_name AS DisplayName, spec AS Spec, description AS Description, brand AS Brand, status AS Status
 FROM material_item
 WHERE code LIKE @pattern
@@ -324,28 +347,29 @@ WHERE code LIKE @pattern
 ORDER BY code
 LIMIT @limit OFFSET @offset;";
 
-            return (await _connection.QueryAsync<MaterialItemSummary>(new CommandDefinition(
-                sql,
-                new { pattern, limit, offset, categoryCode = query.CategoryCode },
-                transaction: Tx,
-                cancellationToken: ct
-            ))).ToList();
-        }
+                return (await _connection.QueryAsync<MaterialItemSummary>(new CommandDefinition(
+                    sql,
+                    new { pattern, limit, offset, categoryCode = query.CategoryCode },
+                    transaction: Tx,
+                    cancellationToken: ct
+                ))).ToList();
+            }
 
-        var first = await QueryAsync(prefixPattern);
-        if (first.Count >= limit)
+            var first = await QueryAsync(prefixPattern);
+            if (first.Count >= limit)
+            {
+                return new PagedResult<MaterialItemSummary>(Total: first.Count, Items: first);
+            }
+
+            var second = await QueryAsync(fuzzyPattern);
+            var merged = first.Concat(second).GroupBy(x => x.Code).Select(g => g.First()).Take(limit).ToList();
+            return new PagedResult<MaterialItemSummary>(Total: merged.Count, Items: merged);
+        });
+
+    public Task<PagedResult<MaterialItemSpecHit>> SearchBySpecAsync(SearchQuery query, CancellationToken ct = default) =>
+        ExecAsync(async () =>
         {
-            return new PagedResult<MaterialItemSummary>(Total: first.Count, Items: first);
-        }
-
-        var second = await QueryAsync(fuzzyPattern);
-        var merged = first.Concat(second).GroupBy(x => x.Code).Select(g => g.First()).Take(limit).ToList();
-        return new PagedResult<MaterialItemSummary>(Total: merged.Count, Items: merged);
-    }
-
-    public async Task<PagedResult<MaterialItemSpecHit>> SearchBySpecAsync(SearchQuery query, CancellationToken ct = default)
-    {
-        var sql = @"
+            var sql = @"
 SELECT code AS Code, spec AS Spec, description AS Description, name AS Name, display_name AS DisplayName, brand AS Brand, status AS Status, group_id AS GroupId
 FROM material_item
 WHERE category_code = @categoryCode
@@ -356,24 +380,25 @@ WHERE category_code = @categoryCode
   )
 LIMIT 20;";
 
-        var items = (await _connection.QueryAsync<MaterialItemSpecHit>(new CommandDefinition(
-            sql,
-            new { categoryCode = query.CategoryCode, keyword = query.SpecKeyword },
-            transaction: Tx,
-            cancellationToken: ct
-        ))).ToList();
+            var items = (await _connection.QueryAsync<MaterialItemSpecHit>(new CommandDefinition(
+                sql,
+                new { categoryCode = query.CategoryCode, keyword = query.SpecKeyword },
+                transaction: Tx,
+                cancellationToken: ct
+            ))).ToList();
 
-        return new PagedResult<MaterialItemSpecHit>(Total: items.Count, Items: items);
-    }
+            return new PagedResult<MaterialItemSpecHit>(Total: items.Count, Items: items);
+        });
 
-    public async Task<PagedResult<MaterialItemSpecHit>> SearchCandidatesBySpecOnlyAsync(
+    public Task<PagedResult<MaterialItemSpecHit>> SearchCandidatesBySpecOnlyAsync(
         string categoryCode,
         string keyword,
         int limit,
-        CancellationToken ct = default)
-    {
-        // 候选收敛：仅 spec LIKE；固定 status=1；排序可复现（用于回归）。
-        var sql = @"
+        CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            // 候选收敛：仅 spec LIKE；固定 status=1；排序可复现（用于回归）。
+            var sql = @"
 SELECT
   mi.code AS Code,
   mi.spec AS Spec,
@@ -399,20 +424,21 @@ ORDER BY
   mi.code
 LIMIT @limit;";
 
-        var items = (await _connection.QueryAsync<MaterialItemSpecHit>(new CommandDefinition(
-            sql,
-            new { categoryCode, keyword, limit },
-            transaction: Tx,
-            cancellationToken: ct
-        ))).ToList();
+            var items = (await _connection.QueryAsync<MaterialItemSpecHit>(new CommandDefinition(
+                sql,
+                new { categoryCode, keyword, limit },
+                transaction: Tx,
+                cancellationToken: ct
+            ))).ToList();
 
-        return new PagedResult<MaterialItemSpecHit>(Total: items.Count, Items: items);
-    }
+            return new PagedResult<MaterialItemSpecHit>(Total: items.Count, Items: items);
+        });
 
-    public async Task<PagedResult<MaterialItemSpecHit>> SearchBySpecAllAsync(string keyword, bool includeDeprecated, int limit, CancellationToken ct = default)
-    {
-        var statusFilter = includeDeprecated ? "" : "AND mi.status = 1";
-        var sql = $@"
+    public Task<PagedResult<MaterialItemSpecHit>> SearchBySpecAllAsync(string keyword, bool includeDeprecated, int limit, CancellationToken ct = default) =>
+        ExecAsync(async () =>
+        {
+            var statusFilter = includeDeprecated ? "" : "AND mi.status = 1";
+            var sql = $@"
 SELECT
   mi.code AS Code,
   mi.spec AS Spec,
@@ -441,19 +467,20 @@ ORDER BY
   mi.code
 LIMIT @limit;";
 
-        var items = (await _connection.QueryAsync<MaterialItemSpecHit>(new CommandDefinition(
-            sql,
-            new { keyword, limit },
-            transaction: Tx,
-            cancellationToken: ct
-        ))).ToList();
+            var items = (await _connection.QueryAsync<MaterialItemSpecHit>(new CommandDefinition(
+                sql,
+                new { keyword, limit },
+                transaction: Tx,
+                cancellationToken: ct
+            ))).ToList();
 
-        return new PagedResult<MaterialItemSpecHit>(Total: items.Count, Items: items);
-    }
+            return new PagedResult<MaterialItemSpecHit>(Total: items.Count, Items: items);
+        });
 
-    public async Task<IReadOnlyList<MaterialExportRow>> ListActiveItemsForExportAsync(CancellationToken ct = default)
-    {
-        var sql = @"
+    public Task<IReadOnlyList<MaterialExportRow>> ListActiveItemsForExportAsync(CancellationToken ct = default) =>
+        ExecAsync<IReadOnlyList<MaterialExportRow>>(async () =>
+        {
+            var sql = @"
 SELECT
   mi.code AS Code,
   mi.spec AS Spec,
@@ -472,14 +499,15 @@ JOIN category c ON mg.category_id = c.id
 WHERE mi.status = 1
 ORDER BY mi.status DESC, mg.category_code, mg.serial_no, mi.suffix, mi.code;";
 
-        var list = (await _connection.QueryAsync<MaterialExportRow>(new CommandDefinition(
-            sql, transaction: Tx, cancellationToken: ct))).ToList();
-        return list;
-    }
+            var list = (await _connection.QueryAsync<MaterialExportRow>(new CommandDefinition(
+                sql, transaction: Tx, cancellationToken: ct))).ToList();
+            return list;
+        });
 
-    public async Task<IReadOnlyList<MaterialExportRow>> ListAllItemsForExportAsync(CancellationToken ct = default)
-    {
-        var sql = @"
+    public Task<IReadOnlyList<MaterialExportRow>> ListAllItemsForExportAsync(CancellationToken ct = default) =>
+        ExecAsync<IReadOnlyList<MaterialExportRow>>(async () =>
+        {
+            var sql = @"
 SELECT
   mi.code AS Code,
   mi.spec AS Spec,
@@ -497,9 +525,49 @@ JOIN material_group mg ON mi.group_id = mg.id
 JOIN category c ON mg.category_id = c.id
 ORDER BY mi.status DESC, mg.category_code, mg.serial_no, mi.suffix, mi.code;";
 
-        var list = (await _connection.QueryAsync<MaterialExportRow>(new CommandDefinition(
-            sql, transaction: Tx, cancellationToken: ct))).ToList();
-        return list;
+            var list = (await _connection.QueryAsync<MaterialExportRow>(new CommandDefinition(
+                sql, transaction: Tx, cancellationToken: ct))).ToList();
+            return list;
+        });
+
+    private async Task<T> ExecAsync<T>(Func<Task<T>> inner, [CallerMemberName] string? method = null)
+    {
+        try
+        {
+            return await inner().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            TryLogTechnical(ex, method ?? "?");
+            throw;
+        }
+    }
+
+    private async Task ExecAsync(Func<Task> inner, [CallerMemberName] string? method = null)
+    {
+        try
+        {
+            await inner().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            TryLogTechnical(ex, method ?? "?");
+            throw;
+        }
+    }
+
+    private void TryLogTechnical(Exception ex, string method)
+    {
+        if (ex is DbConstraintViolationException)
+            return;
+        if (ex is not (SqliteException or IOException or TimeoutException or InvalidOperationException))
+            return;
+        if (McsExceptionMarker.IsLogged(ex))
+            return;
+
+        _logger.LogError(ex,
+            "MCS ErrorLog action={Action} method={Method} correlation_id={CorrelationId}",
+            McsActions.RepoSqliteMaterialRepository, method, McsCorrelationContext.Current ?? "");
+        McsExceptionMarker.MarkLogged(ex);
     }
 }
-

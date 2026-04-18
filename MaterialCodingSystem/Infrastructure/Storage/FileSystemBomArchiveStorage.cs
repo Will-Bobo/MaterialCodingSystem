@@ -1,10 +1,20 @@
 using System.IO;
+using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Application.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Infrastructure.Storage;
 
 public sealed class FileSystemBomArchiveStorage : IFileSystemBomArchiveStorage
 {
+    private readonly ILogger<FileSystemBomArchiveStorage> _logger;
+
+    public FileSystemBomArchiveStorage(ILogger<FileSystemBomArchiveStorage>? logger = null)
+    {
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<FileSystemBomArchiveStorage>.Instance;
+    }
+
     public async Task CopyToArchiveAsync(string sourceFilePath, string finalPath, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(sourceFilePath))
@@ -40,7 +50,7 @@ public sealed class FileSystemBomArchiveStorage : IFileSystemBomArchiveStorage
             // do NOT overwrite existing
             File.Move(tmpPath, finalPath, overwrite: false);
         }
-        catch
+        catch (Exception ex)
         {
             try
             {
@@ -52,6 +62,7 @@ public sealed class FileSystemBomArchiveStorage : IFileSystemBomArchiveStorage
                 // swallow cleanup failure
             }
 
+            McsLoggingExtensions.LogException(_logger, ex, McsActions.BomArchiveService, ErrorCodes.INTERNAL_ERROR);
             throw;
         }
     }
@@ -97,7 +108,7 @@ public sealed class FileSystemBomArchiveStorage : IFileSystemBomArchiveStorage
                 File.Move(tmpPath, finalPath, overwrite: false);
             }
         }
-        catch
+        catch (Exception ex)
         {
             try
             {
@@ -109,6 +120,7 @@ public sealed class FileSystemBomArchiveStorage : IFileSystemBomArchiveStorage
                 // swallow cleanup failure
             }
 
+            McsLoggingExtensions.LogException(_logger, ex, McsActions.BomArchiveService, ErrorCodes.INTERNAL_ERROR);
             throw;
         }
     }

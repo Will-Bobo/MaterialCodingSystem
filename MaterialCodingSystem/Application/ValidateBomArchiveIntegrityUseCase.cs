@@ -2,6 +2,8 @@ using System.IO;
 using System.Security.Cryptography;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Application.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Application;
 
@@ -23,16 +25,21 @@ public sealed record ValidateBomArchiveIntegrityResponse(
 public sealed class ValidateBomArchiveIntegrityUseCase
 {
     private readonly IBomArchiveRepository _repo;
+    private readonly ILogger<ValidateBomArchiveIntegrityUseCase> _logger;
 
-    public ValidateBomArchiveIntegrityUseCase(IBomArchiveRepository repo)
+    public ValidateBomArchiveIntegrityUseCase(IBomArchiveRepository repo, ILogger<ValidateBomArchiveIntegrityUseCase>? logger = null)
     {
         _repo = repo;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ValidateBomArchiveIntegrityUseCase>.Instance;
     }
 
-    public async Task<Result<ValidateBomArchiveIntegrityResponse>> ExecuteAsync(
+    public Task<Result<ValidateBomArchiveIntegrityResponse>> ExecuteAsync(
         ValidateBomArchiveIntegrityRequest req,
         CancellationToken ct = default)
-    {
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.BomValidateArchiveIntegrity,
+            $"{req.FinishedCode}|{req.Version}", ct,
+            async () =>
+            {
         if (string.IsNullOrWhiteSpace(req.FinishedCode) || string.IsNullOrWhiteSpace(req.Version))
             return Result<ValidateBomArchiveIntegrityResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "finished_code/version required.");
         if (string.IsNullOrWhiteSpace(req.SourceFilePath))
@@ -76,7 +83,14 @@ public sealed class ValidateBomArchiveIntegrityUseCase
             Reason: "",
             ArchivedFilePath: record.FilePath
         ));
-    }
+            },
+            static r =>
+            {
+                if (!r.IsSuccess || r.Data is null)
+                    return null;
+                var invalid = r.Data.IsOk ? 0 : 1;
+                return ("invalid_count", invalid);
+            });
 
     private static async Task<string> Sha256Async(string path, CancellationToken ct)
     {

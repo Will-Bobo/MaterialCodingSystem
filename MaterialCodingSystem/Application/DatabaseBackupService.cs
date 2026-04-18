@@ -4,7 +4,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Application.Logging;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Application;
 
@@ -17,22 +19,29 @@ public sealed class DatabaseBackupService
     private readonly IDatabaseConnectionCloser _dbCloser;
     private readonly MaintenanceOperationGate _gate;
     private readonly IRestoreReadOnlyLockNotifier? _restoreLock;
+    private readonly ILogger<DatabaseBackupService> _logger;
 
     public DatabaseBackupService(
         IBackupRepository repo,
         IDatabasePathProvider paths,
         IDatabaseConnectionCloser dbCloser,
         MaintenanceOperationGate gate,
-        IRestoreReadOnlyLockNotifier? restoreLock = null)
+        IRestoreReadOnlyLockNotifier? restoreLock = null,
+        ILogger<DatabaseBackupService>? logger = null)
     {
         _repo = repo;
         _paths = paths;
         _dbCloser = dbCloser;
         _gate = gate;
         _restoreLock = restoreLock;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseBackupService>.Instance;
     }
 
-    public async Task<Result<DatabaseExportResponse>> ExportDatabase(string targetPath, CancellationToken ct = default)
+    public Task<Result<DatabaseExportResponse>> ExportDatabase(string targetPath, CancellationToken ct = default)
+    {
+        var fullPreview = string.IsNullOrWhiteSpace(targetPath) ? null : Path.GetFullPath(targetPath.Trim());
+        return McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.BackupExportDatabase, McsLog.FileNameForLog(fullPreview), ct,
+            async () =>
     {
         if (string.IsNullOrWhiteSpace(targetPath))
             return Result<DatabaseExportResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "target path is required.");
@@ -47,7 +56,7 @@ public sealed class DatabaseBackupService
                 ErrorCodes.DB_EXPORT_TARGET_IS_MAIN_DB,
                 "target path cannot be the main database file.");
 
-        return await _gate.RunAsync(async () =>
+        return await _gate.RunAsync("backup.export", async () =>
         {
             try
             {
@@ -73,11 +82,15 @@ public sealed class DatabaseBackupService
                 return Result<DatabaseExportResponse>.Fail(ErrorCodes.INTERNAL_ERROR, $"export database failed: {ex.Message}");
             }
         }, ct);
+    });
+
     }
 
-    public async Task<Result<AutoBackupResponse>> CreateAutoBackup(CancellationToken ct = default)
+    public Task<Result<AutoBackupResponse>> CreateAutoBackup(CancellationToken ct = default)
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.BackupCreateAutoBackup, null, ct,
+            async () =>
     {
-        return await _gate.RunAsync(async () =>
+        return await _gate.RunAsync("backup.auto_backup", async () =>
         {
             try
             {
@@ -100,13 +113,15 @@ public sealed class DatabaseBackupService
             }
             catch (Exception ex)
             {
-                // auto backup must not impact main flow; caller may ignore this result, but we still return failure.
                 return Result<AutoBackupResponse>.Fail(ErrorCodes.INTERNAL_ERROR, $"auto backup failed: {ex.Message}");
             }
         }, ct);
-    }
+    },
+            static r => r.IsSuccess && r.Data is not null ? ("backup_path", McsLog.FileNameForLog(r.Data.BackupPath) ?? "") : null);
 
-    public async Task<Result<DatabaseRestoreResponse>> RestoreDatabase(string path, CancellationToken ct = default)
+    public Task<Result<DatabaseRestoreResponse>> RestoreDatabase(string path, CancellationToken ct = default)
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.BackupRestoreDatabase, McsLog.FileNameForLog(path), ct,
+            async () =>
     {
         if (string.IsNullOrWhiteSpace(path))
             return Result<DatabaseRestoreResponse>.Fail(ErrorCodes.VALIDATION_ERROR, "path is required.");
@@ -128,7 +143,7 @@ public sealed class DatabaseBackupService
             return Result<DatabaseRestoreResponse>.Fail(ErrorCodes.DB_RESTORE_SOURCE_INVALID, "restore source file is not a valid sqlite database.");
 
         // Step 2: global maintenance mutex (Export/AutoBackup/Restore)
-        return await _gate.RunAsync(async () =>
+        return await _gate.RunAsync("backup.restore", async () =>
         {
             var mainDir = Path.GetDirectoryName(mainDbPath) ?? ".";
             Directory.CreateDirectory(mainDir);
@@ -198,7 +213,7 @@ public sealed class DatabaseBackupService
                 return Result<DatabaseRestoreResponse>.Fail(ErrorCodes.DB_RESTORE_REPLACE_FAILED, $"restore replace failed: {ex.Message}");
             }
         }, ct);
-    }
+    });
 
     private static DateTime ExtractTimestamp(string path)
     {

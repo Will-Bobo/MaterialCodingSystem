@@ -1,6 +1,7 @@
 using System.IO;
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Application.Logging;
 using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Application;
@@ -16,26 +17,28 @@ public sealed class BomArchiveService
         IBomArchiveRepository repo,
         IFileSystemBomArchiveStorage storage,
         IAppExecutionDirectoryProvider dirs,
-        ILogger<BomArchiveService> logger)
+        ILogger<BomArchiveService>? logger = null)
     {
         _repo = repo;
         _storage = storage;
         _dirs = dirs;
-        _logger = logger;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<BomArchiveService>.Instance;
     }
 
     /// <summary>
     /// 执行归档动作（纯“动作层”服务）。是否允许归档由 Application 的 CanArchiveBomUseCase 统一判定；
     /// Presentation 层不得直接调用本服务。
     /// </summary>
-    public async Task<Result<string>> ArchiveAsync(
+    public Task<Result<string>> ArchiveAsync(
         string sourceFilePath,
         string finishedCode,
         string version,
         string? archiveRootPath,
         bool overwriteIfExists,
         CancellationToken ct = default)
-    {
+        => McsLoggingExtensions.RunUseCaseAsync(_logger, McsActions.BomArchiveService, $"{finishedCode}|{version}", ct,
+            async () =>
+            {
         if (string.IsNullOrWhiteSpace(sourceFilePath))
             return Result<string>.Fail(ErrorCodes.VALIDATION_ERROR, "source_file_path is required.");
         if (string.IsNullOrWhiteSpace(finishedCode))
@@ -57,9 +60,8 @@ public sealed class BomArchiveService
             var root = string.IsNullOrWhiteSpace(archiveRootPath) ? _dirs.GetExecutionDirectory() : archiveRootPath.Trim();
             finalPath = Path.Combine(root, "BOM", SanitizeDirName(finishedCode), sanitizedVersion + ext);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger.LogWarning(ex, "BOM archive path invalid. finished_code={finishedCode} version={version}", finishedCode, version);
             return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_PATH_INVALID, "archive path invalid.");
         }
 
@@ -70,24 +72,20 @@ public sealed class BomArchiveService
             else
                 await _storage.CopyToArchiveAsync(sourceFilePath, finalPath, ct);
         }
-        catch (FileNotFoundException ex)
+        catch (FileNotFoundException)
         {
-            _logger.LogWarning(ex, "BOM archive source missing. finished_code={finishedCode} version={version}", finishedCode, version);
             return Result<string>.Fail(ErrorCodes.NOT_FOUND, "source file not found.");
         }
         catch (IOException ex) when (IsFileInUse(ex))
         {
-            _logger.LogInformation(ex, "BOM archive file locked. finished_code={finishedCode} version={version}", finishedCode, version);
             return Result<string>.Fail(ErrorCodes.BOM_FILE_LOCKED, "file is locked.");
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
-            _logger.LogWarning(ex, "BOM archive unauthorized. finished_code={finishedCode} version={version}", finishedCode, version);
             return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_WRITE_FAILED, "archive write failed.");
         }
         catch (IOException)
         {
-            _logger.LogWarning("BOM archive io failed. finished_code={finishedCode} version={version}", finishedCode, version);
             return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "archive io failed.");
         }
 
@@ -101,14 +99,12 @@ public sealed class BomArchiveService
             {
                 // if DB says duplicate, cleanup file to avoid orphan
                 await _storage.DeleteIfExistsAsync(finalPath, ct);
-                _logger.LogInformation(ex, "BOM archive version exists. finished_code={finishedCode} version={version}", finishedCode, version);
                 return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_VERSION_EXISTS, "version exists.");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // unknown DB failure: cleanup file to avoid "file exists but DB missing"
                 await _storage.DeleteIfExistsAsync(finalPath, ct);
-                _logger.LogError(ex, "BOM archive db insert failed. finished_code={finishedCode} version={version}", finishedCode, version);
                 return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "archive db insert failed.");
             }
         }
@@ -118,15 +114,16 @@ public sealed class BomArchiveService
             {
                 await _repo.UpdateAsync(finishedCode, version, finalPath, ct);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "BOM archive db update failed. finished_code={finishedCode} version={version}", finishedCode, version);
                 return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "archive db update failed.");
             }
         }
 
         return Result<string>.Ok(finalPath);
-    }
+    },
+            static r => r.IsSuccess && r.Data is not null ? ("saved_name", McsLog.FileNameForLog(r.Data) ?? "") : null,
+            static c => c is ErrorCodes.BOM_ARCHIVE_VERSION_EXISTS or ErrorCodes.BOM_FILE_LOCKED);
 
     public static string SanitizeFileName(string raw)
     {

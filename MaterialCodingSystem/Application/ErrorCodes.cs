@@ -41,5 +41,8 @@ public static class ErrorCodes
     public const string BOM_IMPORT_IN_PROGRESS = "BOM_IMPORT_IN_PROGRESS";
     public const string BOM_ANALYZE_INCONSISTENT_STATE = "BOM_ANALYZE_INCONSISTENT_STATE";
     public const string INVALID_EXCEL = "INVALID_EXCEL";
+
+    /// <summary>运维门禁互斥：当前已有备份/导出/还原在执行。</summary>
+    public const string MAINTENANCE_BUSY = "MAINTENANCE_BUSY";
 }
 

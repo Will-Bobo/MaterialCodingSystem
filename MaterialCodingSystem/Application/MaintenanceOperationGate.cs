@@ -1,6 +1,6 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Diagnostics;
+using MaterialCodingSystem.Application.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Application;
 
@@ -11,13 +11,27 @@ namespace MaterialCodingSystem.Application;
 public sealed class MaintenanceOperationGate
 {
     private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private readonly ILogger<MaintenanceOperationGate> _logger;
 
-    public async Task<T> RunAsync<T>(Func<Task<T>> action, CancellationToken ct = default)
+    public MaintenanceOperationGate(ILogger<MaintenanceOperationGate>? logger = null)
     {
-        await _semaphore.WaitAsync(ct);
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<MaintenanceOperationGate>.Instance;
+    }
+
+    public async Task<T> RunAsync<T>(string gateName, Func<Task<T>> action, CancellationToken ct = default)
+    {
+        var immediate = await _semaphore.WaitAsync(TimeSpan.Zero, ct).ConfigureAwait(false);
+        if (!immediate)
+        {
+            var waitSw = Stopwatch.StartNew();
+            await _semaphore.WaitAsync(ct).ConfigureAwait(false);
+            waitSw.Stop();
+            McsLoggingExtensions.LogMaintenanceGateBlocked(_logger, gateName, waitSw.ElapsedMilliseconds);
+        }
+
         try
         {
-            return await action();
+            return await action().ConfigureAwait(false);
         }
         finally
         {
@@ -25,4 +39,3 @@ public sealed class MaintenanceOperationGate
         }
     }
 }
-

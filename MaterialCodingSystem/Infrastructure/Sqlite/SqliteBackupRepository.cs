@@ -5,8 +5,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using MaterialCodingSystem.Application;
 using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Application.Logging;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Infrastructure.Sqlite;
 
@@ -14,11 +17,13 @@ public sealed class SqliteBackupRepository : IBackupRepository
 {
     private readonly SqliteConnection _connection;
     private readonly IDatabasePathProvider _paths;
+    private readonly ILogger<SqliteBackupRepository> _logger;
 
-    public SqliteBackupRepository(SqliteConnection connection, IDatabasePathProvider paths)
+    public SqliteBackupRepository(SqliteConnection connection, IDatabasePathProvider paths, ILogger<SqliteBackupRepository>? logger = null)
     {
         _connection = connection;
         _paths = paths;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteBackupRepository>.Instance;
     }
 
     public async Task VacuumIntoAsync(string targetPath, CancellationToken ct = default)
@@ -44,10 +49,12 @@ public sealed class SqliteBackupRepository : IBackupRepository
         }
         catch (SqliteException ex)
         {
+            McsLoggingExtensions.LogException(_logger, ex, McsActions.InfraVacuumInto, ErrorCodes.INTERNAL_ERROR);
             throw new InvalidOperationException($"SQLite VACUUM INTO failed: {ex.SqliteErrorCode} {ex.Message}", ex);
         }
         catch (IOException ex)
         {
+            McsLoggingExtensions.LogException(_logger, ex, McsActions.InfraVacuumInto, ErrorCodes.INTERNAL_ERROR);
             throw new InvalidOperationException($"Write backup file failed: {ex.Message}", ex);
         }
     }

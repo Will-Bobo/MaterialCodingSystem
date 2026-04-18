@@ -1,6 +1,8 @@
 using MaterialCodingSystem.Application.Contracts;
 using MaterialCodingSystem.Application.Interfaces;
+using MaterialCodingSystem.Application.Logging;
 using MaterialCodingSystem.Domain.Services;
+using Microsoft.Extensions.Logging;
 
 namespace MaterialCodingSystem.Application;
 
@@ -10,14 +12,19 @@ namespace MaterialCodingSystem.Application;
 public sealed class ParseBomUseCase
 {
     private readonly IBomGridParser _gridParser;
+    private readonly ILogger<ParseBomUseCase> _logger;
 
-    public ParseBomUseCase(IBomGridParser gridParser)
+    public ParseBomUseCase(IBomGridParser gridParser, ILogger<ParseBomUseCase>? logger = null)
     {
         _gridParser = gridParser;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ParseBomUseCase>.Instance;
     }
 
     public Result<BomParsedDocument> Execute(string filePath)
     {
+        return McsLoggingExtensions.RunUseCaseSync(_logger, McsActions.BomParse, McsLog.FileNameForLog(filePath),
+            () =>
+            {
         var gridRes = _gridParser.Parse(filePath);
         if (!gridRes.IsSuccess || gridRes.Data is null)
             return Result<BomParsedDocument>.Fail(gridRes.Error!.Code, gridRes.Error.Message);
@@ -33,6 +40,8 @@ public sealed class ParseBomUseCase
         return Result<BomParsedDocument>.Ok(new BomParsedDocument(
             new BomParsedHeader(parsed.Success.FinishedCode, parsed.Success.Version),
             rows));
+            },
+            r => r.IsSuccess && r.Data is not null ? ("line_count", r.Data.Rows.Count) : null);
     }
 
     private static Result<BomParsedDocument> MapFailure(MaterialCodingSystem.Domain.Services.Models.BomParsingFailure? f)
