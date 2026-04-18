@@ -9,6 +9,7 @@
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Assets/Icon/mcs.ico</ApplicationIcon>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">

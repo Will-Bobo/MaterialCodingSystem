@@ -6,7 +6,7 @@
         xmlns:conv="clr-namespace:MaterialCodingSystem.Presentation.Converters"
         xmlns:views="clr-namespace:MaterialCodingSystem.Presentation.Views"
         mc:Ignorable="d"
-        Title="Material Coding System" Height="840" Width="1200">
+        Title="云柯物料编码系统" Height="840" Width="1200">
     <Window.Resources>
         <SolidColorBrush x:Key="Brush.Primary" Color="#2563EB"/>
         <SolidColorBrush x:Key="Brush.App.Background" Color="#F3F3F3"/>
