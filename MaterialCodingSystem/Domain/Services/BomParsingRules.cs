@@ -11,9 +11,20 @@ public static class BomParsingRules
     public static readonly string[] HeaderVersionKeys = { "PCBA版本号", "PCBA版本", "PCBA" };
     public static readonly string[] DetailHeaderNames = { "编码", "名称", "描述", "规格", "品牌" };
 
+    /// <summary>
+    /// 成品编码取值误命中（同格嵌套 PCBA:/VER: 等）时丢弃为非空检测失败，触发 <see cref="BomParsingFailureKind.HeaderMissing"/>。
+    /// </summary>
+    private static readonly string[] InvalidFinishedCodeLabelPrefixes =
+    {
+        "PCBA:", "VERSION:", "VER:", "版本:", "REV:",
+    };
+
     public static BomParsingResult Parse(BomGrid grid)
     {
         var finishedCode = FindHeaderValue(grid, HeaderFinishedCodeKeys);
+        if (ShouldDiscardFinishedCodeValue(finishedCode))
+            finishedCode = "";
+
         var version = FindHeaderValue(grid, HeaderVersionKeys);
         if (IsBlank(finishedCode) || IsBlank(version))
             return BomParsingResult.Fail(new BomParsingFailure(BomParsingFailureKind.HeaderMissing, null));
@@ -157,5 +168,26 @@ public static class BomParsingRules
     public static string Normalize(string? text) => (text ?? "").Trim();
 
     public static bool IsBlank(string? text) => string.IsNullOrWhiteSpace(text);
+
+    /// <summary>
+    /// 收紧成品编码：含嵌套标签/冒号片段则视为无效（按空值参与 HeaderMissing）。
+    /// </summary>
+    private static bool ShouldDiscardFinishedCodeValue(string? finishedCode)
+    {
+        var v = Normalize(finishedCode);
+        if (IsBlank(v))
+            return false;
+
+        if (v.IndexOf(':') >= 0 || v.IndexOf('：') >= 0)
+            return true;
+
+        foreach (var p in InvalidFinishedCodeLabelPrefixes)
+        {
+            if (v.StartsWith(p, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
 }
 

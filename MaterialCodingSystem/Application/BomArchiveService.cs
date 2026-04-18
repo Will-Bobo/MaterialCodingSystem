@@ -40,15 +40,15 @@ public sealed class BomArchiveService
             async () =>
             {
         if (string.IsNullOrWhiteSpace(sourceFilePath))
-            return Result<string>.Fail(ErrorCodes.VALIDATION_ERROR, "source_file_path is required.");
+            return Result<string>.Fail(ErrorCodes.VALIDATION_ERROR, "未提供源文件路径。");
         if (string.IsNullOrWhiteSpace(finishedCode))
-            return Result<string>.Fail(ErrorCodes.VALIDATION_ERROR, "finished_code is required.");
+            return Result<string>.Fail(ErrorCodes.VALIDATION_ERROR, "未提供成品编码。");
         if (string.IsNullOrWhiteSpace(version))
-            return Result<string>.Fail(ErrorCodes.VALIDATION_ERROR, "version is required.");
+            return Result<string>.Fail(ErrorCodes.VALIDATION_ERROR, "未提供版本号。");
 
         // 防御：即使前置已判定，也要兜底（DB UNIQUE 仍为最终仲裁）
         if (!overwriteIfExists && await _repo.ExistsAsync(finishedCode, version, ct))
-            return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_VERSION_EXISTS, "version exists.");
+            return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_VERSION_EXISTS, "该版本已存在。");
 
         var sanitizedVersion = SanitizeFileName(version);
         var ext = Path.GetExtension(sourceFilePath);
@@ -62,7 +62,7 @@ public sealed class BomArchiveService
         }
         catch (Exception)
         {
-            return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_PATH_INVALID, "archive path invalid.");
+            return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_PATH_INVALID, "归档路径无效。");
         }
 
         try
@@ -74,19 +74,19 @@ public sealed class BomArchiveService
         }
         catch (FileNotFoundException)
         {
-            return Result<string>.Fail(ErrorCodes.NOT_FOUND, "source file not found.");
+            return Result<string>.Fail(ErrorCodes.NOT_FOUND, "源文件不存在。");
         }
         catch (IOException ex) when (IsFileInUse(ex))
         {
-            return Result<string>.Fail(ErrorCodes.BOM_FILE_LOCKED, "file is locked.");
+            return Result<string>.Fail(ErrorCodes.BOM_FILE_LOCKED, "文件正在使用中，请关闭后重试。");
         }
         catch (UnauthorizedAccessException)
         {
-            return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_WRITE_FAILED, "archive write failed.");
+            return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_WRITE_FAILED, "归档写入失败。");
         }
         catch (IOException)
         {
-            return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "archive io failed.");
+            return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "归档读写失败。");
         }
 
         if (!overwriteIfExists)
@@ -99,13 +99,13 @@ public sealed class BomArchiveService
             {
                 // if DB says duplicate, cleanup file to avoid orphan
                 await _storage.DeleteIfExistsAsync(finalPath, ct);
-                return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_VERSION_EXISTS, "version exists.");
+                return Result<string>.Fail(ErrorCodes.BOM_ARCHIVE_VERSION_EXISTS, "该版本已存在。");
             }
             catch (Exception)
             {
                 // unknown DB failure: cleanup file to avoid "file exists but DB missing"
                 await _storage.DeleteIfExistsAsync(finalPath, ct);
-                return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "archive db insert failed.");
+                return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "归档记录写入失败。");
             }
         }
         else
@@ -116,7 +116,7 @@ public sealed class BomArchiveService
             }
             catch (Exception)
             {
-                return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "archive db update failed.");
+                return Result<string>.Fail(ErrorCodes.INTERNAL_ERROR, "归档记录更新失败。");
             }
         }
 

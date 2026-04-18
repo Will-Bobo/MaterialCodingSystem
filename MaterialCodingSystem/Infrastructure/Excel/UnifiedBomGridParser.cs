@@ -34,10 +34,10 @@ public sealed class UnifiedBomGridParser : IBomGridParser
     public Result<BomGrid> Parse(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
-            return Result<BomGrid>.Fail(ErrorCodes.VALIDATION_ERROR, "file_path is required.");
+            return Result<BomGrid>.Fail(ErrorCodes.VALIDATION_ERROR, "请提供文件路径。");
 
         if (!File.Exists(filePath))
-            return Result<BomGrid>.Fail(ErrorCodes.NOT_FOUND, "file not found.");
+            return Result<BomGrid>.Fail(ErrorCodes.NOT_FOUND, "文件不存在。");
 
         try
         {
@@ -46,17 +46,17 @@ public sealed class UnifiedBomGridParser : IBomGridParser
                 return Result<BomGrid>.Ok(ReadXlsxToGrid(filePath));
             if (ext.Equals(".xls", StringComparison.OrdinalIgnoreCase))
                 return Result<BomGrid>.Ok(ReadXlsToGrid(filePath));
-            return Result<BomGrid>.Fail(ErrorCodes.BOM_FILE_INVALID, "unsupported excel extension.");
+            return Result<BomGrid>.Fail(ErrorCodes.BOM_FILE_INVALID, "不支持的 Excel 扩展名。");
         }
         catch (IOException ex) when (IsFileInUse(ex))
         {
             _logger.LogInformation(ex, "BOM file locked: {filePath}", filePath);
-            return Result<BomGrid>.Fail(ErrorCodes.BOM_FILE_LOCKED, "file is locked.");
+            return Result<BomGrid>.Fail(ErrorCodes.BOM_FILE_LOCKED, "文件正在使用中，请关闭后重试。");
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "BOM grid parse failed: {filePath}", filePath);
-            return Result<BomGrid>.Fail(ErrorCodes.BOM_FILE_INVALID, "failed to parse excel.");
+            return Result<BomGrid>.Fail(ErrorCodes.BOM_FILE_INVALID, "解析 Excel 失败。");
         }
     }
 

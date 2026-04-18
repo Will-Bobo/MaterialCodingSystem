@@ -147,10 +147,13 @@ public sealed class DatabaseBackupService
         {
             var mainDir = Path.GetDirectoryName(mainDbPath) ?? ".";
             Directory.CreateDirectory(mainDir);
+            // 恢复过程的 tmp/bak 集中到子目录，便于管理与查阅（主库路径不变）
+            var restoreWorkDir = Path.Combine(mainDir, "restore");
+            Directory.CreateDirectory(restoreWorkDir);
 
             var ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var tmp = Path.Combine(mainDir, $"mcs.restore.{ts}.tmp");
-            var bak = Path.Combine(mainDir, $"mcs.restore.{ts}.bak");
+            var tmp = Path.Combine(restoreWorkDir, $"mcs.restore.{ts}.tmp");
+            var bak = Path.Combine(restoreWorkDir, $"mcs.restore.{ts}.bak");
 
             // Step 3: close db connection (release file handle)
             try
