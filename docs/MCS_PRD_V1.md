@@ -300,7 +300,7 @@ CREATE TABLE material_group (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     category_id   INTEGER NOT NULL,     -- 外键：Category.id（唯一关系字段）
     category_code TEXT NOT NULL,        -- 冗余：用于展示/导出/查询优化（非关系字段）
-    serial_no     INTEGER NOT NULL,     -- 1,2,3...
+    serial_no     INTEGER NOT NULL,     -- 0,1,2,3...（兼容历史 0000000；Auto 仍从 1 起）
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
 
     UNIQUE(category_id, serial_no),
@@ -937,7 +937,11 @@ V1.4 当前仅增加一条规则：
     * 解析规则：
       * `category_code = code[0..2]`（前 3 位）
       * `serial_no = int(code[3..9])`（中间 7 位，按十进制转整数）
-        * **合法范围（Manual）**：`serial_no >= 1`；`0000000` 视为非法 → **`CODE_FORMAT_INVALID`**
+        * **合法范围（Manual）**：`serial_no >= 0`（兼容历史 `0000000` 编码）；小于 0 或非数字 → **`CODE_FORMAT_INVALID`**
+        * **兼容说明（必须明确，避免歧义）**：
+          * `0000000` 允许用于 **历史物料整理 / BOM 导入 / 存量数据兼容**；
+          * **Auto 自动分配流水号仍从 `0000001` 起**（不改变自动编码起始策略），不生成 `0000000`；
+          * 若使用 Manual 新建并输入 `0000000`，系统按规则解析并处理唯一性约束（同分类同流水号仍受 `UNIQUE(category_id, serial_no)` 约束）。
       * `suffix = code[10]`（最后 1 位；非 `A-Z` → **`SUFFIX_INVALID`**）
   * **分类一致性校验（Manual，冻结）**：
     * 解析出的 `category_code` 必须等于表单所选 `category_code`
@@ -1026,7 +1030,7 @@ UI 结构（示意）：
      0) **输入标准化**：`code = trim(code)` 且转大写；后续所有校验均基于标准化后的 `code`
      1) **code 格式校验**：`^[A-Z]{3}[0-9]{7}[A-Z]$`；不满足 → **禁止提交**（`CODE_FORMAT_INVALID`）
      2) **code 解析**：解析出 `category_code / serial_no / suffix`
-        * `serial_no >= 1`；否则（如 `0000000`）→ **禁止提交**（`CODE_FORMAT_INVALID`）
+        * `serial_no >= 0`（兼容 `0000000`）；小于 0 或非数字 → **禁止提交**（`CODE_FORMAT_INVALID`）
         * 若 `suffix` 非 `A-Z` → **禁止提交**（`SUFFIX_INVALID`）
      3) **分类一致性**：解析出的 `category_code` 必须等于当前选择分类；不一致 → **禁止提交**（`CATEGORY_MISMATCH`）
      4) **code 唯一**：校验 `UNIQUE(code)`；若冲突 → **禁止提交**并提示“编码已存在”（`CODE_DUPLICATE`）
@@ -1523,7 +1527,7 @@ CreateMaterialItemA(input)
 3. **code 格式校验**：必须匹配 `^[A-Z]{3}[0-9]{7}[A-Z]$`；否则 → **`CODE_FORMAT_INVALID`**
 4. **code 解析**：
    * `parsed_category_code = code[0..2]`
-   * `serial_no = int(code[3..9])`（**必须 >= 1**；`0000000` 视为非法 → **`CODE_FORMAT_INVALID`**）
+   * `serial_no = int(code[3..9])`（**必须 >= 0**；兼容历史 `0000000`；小于 0 或非数字 → **`CODE_FORMAT_INVALID`**）
    * `suffix = code[10]`（非 `A-Z` → **`SUFFIX_INVALID`**）
 5. **分类一致性**：`parsed_category_code` 必须等于表单选择 `category_code`；否则 → **`CATEGORY_MISMATCH`**
 6. **suffix 限制（新建主物料A）**：`suffix` 必须为 `'A'`；否则 → **`SUFFIX_INVALID`**
@@ -2182,7 +2186,7 @@ CREATE TABLE material_group (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     category_id   INTEGER NOT NULL,     -- 外键：Category.id（唯一关系字段）
     category_code TEXT NOT NULL,        -- 冗余：用于展示/导出/查询优化（非关系字段）
-    serial_no     INTEGER NOT NULL,     -- 1,2,3...
+    serial_no     INTEGER NOT NULL,     -- 0,1,2,3...（兼容历史 0000000；Auto 仍从 1 起）
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
 
     UNIQUE(category_id, serial_no),

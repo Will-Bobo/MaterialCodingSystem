@@ -6,7 +6,7 @@ namespace MaterialCodingSystem.Domain.ValueObjects;
 
 /// <summary>
 /// Manual 模式手工输入的物料编码：负责 trim/upper、正则校验与解析。
-/// 规则：^[A-Z]{3}[0-9]{7}[A-Z]$，serial_no >= 1。
+/// 规则：^[A-Z]{3}[0-9]{7}[A-Z]$，serial_no >= 0（兼容历史 0000000）。
 /// </summary>
 public sealed class ManualMaterialCode
 {
@@ -43,9 +43,8 @@ public sealed class ManualMaterialCode
         var serialText = normalized.Substring(3, 7);
         var suffixChar = normalized[10];
 
-        if (!int.TryParse(serialText, out var serialNo) || serialNo < 1)
+        if (!int.TryParse(serialText, out var serialNo) || serialNo < 0)
         {
-            // 0000000 非法
             throw new DomainException("CODE_FORMAT_INVALID", "serial_no invalid.");
         }
 

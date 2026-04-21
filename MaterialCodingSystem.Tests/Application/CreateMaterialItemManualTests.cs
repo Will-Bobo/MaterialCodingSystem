@@ -42,9 +42,17 @@ public class CreateMaterialItemManualTests
     }
 
     [Fact]
-    public async Task CreateManual_SerialZero_ReturnsCodeFormatInvalid()
+    public async Task CreateManual_SerialZero_Succeeds()
     {
-        var app = new MaterialApplicationService(new NoopUnitOfWork(), new FakeMaterialRepository());
+        var repo = new FakeMaterialRepository
+        {
+            CategoryExists = true,
+            CategoryName = "电子料",
+            CategoryId = 7,
+            SpecExists = false,
+            GroupIdByCategoryAndSerialNo = 99
+        };
+        var app = new MaterialApplicationService(new NoopUnitOfWork(), repo);
 
         var res = await app.CreateMaterialItemManual(new CreateMaterialItemManualRequest(
             CategoryCode: "ELC",
@@ -56,8 +64,12 @@ public class CreateMaterialItemManualTests
             Brand: "b"
         ));
 
-        Assert.False(res.IsSuccess);
-        Assert.Equal(ErrorCodes.CODE_FORMAT_INVALID, res.Error!.Code);
+        Assert.True(res.IsSuccess);
+        Assert.Equal("ELC0000000A", res.Data!.Code);
+        Assert.Equal("A", res.Data.Suffix);
+        Assert.Equal(0, res.Data.SerialNo);
+        Assert.Equal("ELC", res.Data.CategoryCode);
+        Assert.Equal(1, repo.InsertItemCalled);
     }
 
     [Fact]
