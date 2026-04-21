@@ -68,6 +68,11 @@ public sealed class CreateMaterialViewModel : ViewModelBase
         {
             if (SetProperty(ref _selectedCategory, value))
             {
+                // Name：分类名快照（服务端最终写入 categoryName）
+                Name = SelectedCategory?.Name ?? "";
+                // DisplayName：可编辑显示名。默认跟随分类名；用户编辑后不再自动覆盖
+                if (!_displayNameEditedByUser)
+                    DisplayName = SelectedCategory?.Name ?? "";
                 RefreshDerivedState();
                 ScheduleCandidateRefresh();
             }
@@ -137,6 +142,21 @@ public sealed class CreateMaterialViewModel : ViewModelBase
 
     private string _name = "";
     public string Name { get => _name; set => SetProperty(ref _name, value); }
+
+    private string _displayName = "";
+    private bool _displayNameEditedByUser;
+    public string DisplayName
+    {
+        get => _displayName;
+        set
+        {
+            if (SetProperty(ref _displayName, value))
+            {
+                _displayNameEditedByUser = true;
+                RefreshDerivedState();
+            }
+        }
+    }
 
     private string _brand = "";
     public string Brand
@@ -502,6 +522,8 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             Description = "";
             Brand = "";
             _allowedKey = null;
+            _displayNameEditedByUser = false;
+            DisplayName = SelectedCategory?.Name ?? "";
         }
         finally
         {
@@ -681,12 +703,16 @@ public sealed class CreateMaterialViewModel : ViewModelBase
     private async Task CreateWithConfirmAsync()
     {
         // 仅 UI 确认：不改业务逻辑
+        var displayNameForConfirm =
+            string.IsNullOrWhiteSpace(DisplayName?.Trim())
+                ? (SelectedCategory?.Name ?? "")
+                : DisplayName.Trim();
         var model = new CreateMaterialConfirmModel
         {
             Code = Code?.Trim() ?? "",
             Spec = Spec?.Trim() ?? "",
             Description = Description?.Trim() ?? "",
-            Name = SelectedCategory?.Name ?? "",
+            Name = displayNameForConfirm,
             Brand = Brand?.Trim() ?? ""
         };
 
@@ -707,12 +733,13 @@ public sealed class CreateMaterialViewModel : ViewModelBase
             return;
         }
 
+        var displayName = string.IsNullOrWhiteSpace(DisplayName?.Trim()) ? null : DisplayName.Trim();
         var res = await _app.CreateMaterialItemManual(new CreateMaterialItemManualRequest(
             CategoryCode: categoryCode,
             Code: Code,
             Spec: Spec,
-            Name: Name,
-            DisplayName: null,
+            Name: SelectedCategory?.Name ?? "",
+            DisplayName: displayName,
             Description: Description,
             Brand: string.IsNullOrWhiteSpace(Brand) ? null : Brand
         ));

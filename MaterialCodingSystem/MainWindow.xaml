@@ -201,10 +201,12 @@
 
                                     <Border BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
                                         <StackPanel>
-                                            <TextBlock Text="名称" FontWeight="SemiBold"/>
-                                            <TextBlock Margin="0,4,0,0"
-                                                       Foreground="{StaticResource Brush.Text.Muted}"
-                                                       Text="{Binding CreateMaterial.SelectedCategory.Name, FallbackValue=（未选择分类）}"/>
+                                            <TextBlock Text="显示名称" FontWeight="SemiBold" Margin="0,12,0,0"/>
+                                            <TextBlock Foreground="{StaticResource Brush.Text.Muted}" FontSize="11" Margin="0,4,0,0"
+                                                       Text="用于后续展示/导出，可按 BOM/业务习惯调整。留空则回退为系统默认显示名称。"/>
+                                            <TextBox Style="{StaticResource ModernTextBox}"
+                                                     Margin="0,4,0,0"
+                                                     Text="{Binding CreateMaterial.DisplayName, UpdateSourceTrigger=PropertyChanged}"/>
                                             <TextBlock Text="品牌" FontWeight="SemiBold" Margin="0,12,0,0"/>
                                             <TextBox Style="{StaticResource ModernTextBox}"
                                                      Margin="0,4,0,0" Text="{Binding CreateMaterial.Brand, UpdateSourceTrigger=PropertyChanged}"/>
@@ -749,7 +751,8 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="编码" Binding="{Binding Code}" Width="200"/>
                             <DataGridTextColumn Header="名称" Binding="{Binding DisplayNameForUi}" Width="150"/>
-                            <DataGridTextColumn Header="规格号" Binding="{Binding Spec}" Width="*"/>
+                            <DataGridTextColumn Header="规格号" Binding="{Binding Spec}" Width="220"/>
+                            <DataGridTextColumn Header="规格描述" Binding="{Binding Description}" Width="*" MinWidth="260"/>
                             <DataGridTextColumn Header="品牌" Binding="{Binding Brand}" Width="120"/>
                             <DataGridTextColumn Header="状态" Width="80"
                                                 Binding="{Binding Status, Converter={StaticResource StatusToText}}">
